@@ -1,62 +1,127 @@
 # jmeter-mcp-server
 
-Servidor MCP (stdio) para construir, manter, executar e ler relatórios de
-testes do [Apache JMeter](https://jmeter.apache.org/) sem precisar abrir a
-interface gráfica.
+A stdio [MCP](https://modelcontextprotocol.io/) server for building,
+maintaining, running, and reading reports for [Apache JMeter](https://jmeter.apache.org/)
+test plans — without opening the GUI.
 
-O plano de teste é modelado como uma árvore JSON (armazenada localmente) e só
-é convertido para um `.jmx` de verdade na hora de rodar — o `.jmx` gerado
-segue o mesmo formato que o JMeter usa, então pode ser aberto normalmente na
-GUI se você quiser conferir visualmente.
+Point an MCP-capable client (Claude Code, Claude Desktop, etc.) at this
+server and it can compose a test plan element by element, kick off a real
+non-GUI JMeter run in the background, and read back aggregated latency/error
+stats, all through typed tool calls instead of clicking through JMeter's
+tree view.
 
-## Tools disponíveis
+## Why an MCP server for this, specifically
 
-**Autoria** (cada uma retorna o `id` do nó criado, usado como `parentId` da próxima):
-- `create_test_plan` — cria um novo plano, retorna `planId` e o id do nó raiz
-- `add_thread_group` — grupo de threads (usuários virtuais)
-- `add_http_sampler` — requisição HTTP (sample request)
-- `add_json_extractor` — post-processor JSON Extractor
-- `add_header_manager` — HTTP Header Manager
-- `add_response_assertion` — Response Assertion
-- `add_aggregate_report_listener` — listener Aggregate Report
-- `add_summary_report_listener` — listener Summary Report
+An LLM can already write a `.jmx` file from scratch — it's just XML. The
+problem is that JMeter's `.jmx` format is a `hashTree` structure with a lot
+of fragile, easy-to-get-subtly-wrong detail: exact `guiclass`/`testclass`
+pairs per element, property names that don't always match the GUI label
+(`ThreadGroup.num_threads` is a `stringProp`, not an `intProp`; assertion
+match types are an integer *bitmask*), and strict parent/child pairing
+between every element and its sibling `<hashTree>`. None of that is
+self-checking — a slightly wrong bitmask still produces valid, loadable XML
+that just quietly does the wrong thing (an assertion that never fires, a
+listener with no output). Re-deriving all of that from memory on every
+request means re-risking the same mistakes every time.
 
-**Inspeção:**
-- `list_test_plans` — lista os planos existentes
-- `get_test_plan` — retorna a árvore completa de um plano (útil para achar `parentId`s)
+This server encodes that knowledge exactly once, in a serializer that's been
+exercised against a real JMeter install, and exposes it as typed tools. The
+concrete benefits that come out of that:
 
-**Execução e relatórios** (assíncrono):
-- `execute_test_plan` — gera o `.jmx` e roda o JMeter em modo não-GUI em background; retorna um `executionId` na hora
-- `get_execution_status` — status da execução (`running`/`completed`/`failed`) + tail do log
-- `stop_execution` — mata o processo do JMeter em andamento
-- `get_execution_report` — lê o `.jtl` gerado pelos listeners Aggregate/Summary e devolve estatísticas agregadas por request e no total (contagem, erro%, avg/min/max/mediana/p90/p95/p99, throughput, KB/s)
+- **Correctness through a fixed, tested code path.** Every `add_http_sampler`
+  call goes through the same verified serializer, instead of an LLM
+  regenerating XML from memory each time with a chance of drift or a subtly
+  wrong property.
+- **Cheap incremental edits.** A test plan is stored as a small JSON tree
+  with stable node ids. Adding one more assertion is a single tool call
+  referencing a `parentId` — not reading and rewriting an entire `.jmx` file
+  to figure out where to splice in a change. In a quick side-by-side on a
+  6-element plan, the JSON tree came out to ~280 tokens versus ~1,580 tokens
+  for the equivalent `.jmx` XML (which repeats `guiclass`/`testclass` pairs
+  and a full `saveConfig` block per listener) — and that gap only widens as
+  a plan grows, since editing the JSON tree costs *one small tool call*
+  regardless of how large the overall plan already is.
+- **Aggregated results, not raw samples.** `get_execution_report` parses the
+  JTL output and returns computed stats (count, error %, avg/min/max/median,
+  p90/p95/p99, throughput, KB/s) — not a dump of every sample row for the
+  client to average by hand.
+- **A real async execution model.** `execute_test_plan` starts JMeter in
+  the background and returns immediately with an `executionId`;
+  `get_execution_status` / `get_execution_report` poll it. Long-running load
+  tests don't block anything waiting for a single request/response.
 
-## Pré-requisitos
+The generated `.jmx` follows the same format JMeter itself writes, so it can
+still be opened in the real JMeter GUI at any point if you want to eyeball
+it visually or hand it off to someone who prefers the UI.
 
-- Node.js 18+
-- JMeter instalado localmente, com a variável de ambiente `JMETER_HOME`
-  apontando para a pasta que contém `bin/jmeter` (ex.: via Homebrew,
-  `brew install jmeter` deixa em `/opt/homebrew/opt/jmeter/libexec`)
+## How a test plan is represented
 
-## Build
+Each plan is stored as a JSON tree (`{id, type, props, children[]}`) rather
+than as XML text. All authoring tools mutate this tree by appending a child
+under a given `parentId`, and the tree is only serialized into a real `.jmx`
+file at execution time. This is what makes incremental edits cheap and keeps
+the fiddly XML schema knowledge in one place (`src/jmx/serializer.ts`)
+instead of spread across every tool.
 
-```bash
-npm install
-npm run build
+## Tools
+
+**Authoring** (each returns the new node's `id`, used as `parentId` for
+whatever you attach under it next):
+
+| Tool | Adds |
+|---|---|
+| `create_test_plan` | Root `TestPlan` node — returns `planId` and the root node id |
+| `add_thread_group` | Thread Group (virtual users) |
+| `add_http_sampler` | HTTP Request sampler |
+| `add_json_extractor` | JSON Extractor post-processor |
+| `add_header_manager` | HTTP Header Manager |
+| `add_response_assertion` | Response Assertion |
+| `add_aggregate_report_listener` | Aggregate Report listener |
+| `add_summary_report_listener` | Summary Report listener |
+
+**Inspection:**
+
+| Tool | Purpose |
+|---|---|
+| `list_test_plans` | List every plan in the workspace |
+| `get_test_plan` | Full element tree of a plan, including every node's `id` |
+
+**Execution & reporting** (async — a run happens in the background):
+
+| Tool | Purpose |
+|---|---|
+| `execute_test_plan` | Serialize to `.jmx` and run JMeter in non-GUI mode; returns `{ executionId }` immediately |
+| `get_execution_status` | `running` / `completed` / `failed`, plus a tail of the JMeter log |
+| `stop_execution` | Send `SIGTERM` to a running JMeter process |
+| `get_execution_report` | Aggregated stats (per label + overall) parsed from the run's JTL output |
+
+## Example workflow
+
+```
+create_test_plan            → { planId, rootNodeId }
+add_thread_group             (parentId: rootNodeId)  → { nodeId: threadGroupId }
+add_http_sampler              (parentId: threadGroupId) → { nodeId: samplerId }
+add_response_assertion        (parentId: samplerId)
+add_aggregate_report_listener (parentId: threadGroupId)
+execute_test_plan             (planId) → { executionId }
+get_execution_status           (executionId)   ← poll until "completed"
+get_execution_report            (executionId) → aggregated latency/error stats
 ```
 
-Isso gera `dist/index.js`, o entrypoint do servidor.
+## Prerequisites
 
-Variáveis de ambiente:
-- `JMETER_HOME` (obrigatória) — instalação do JMeter
-- `JMETER_MCP_WORKSPACE` (opcional) — onde salvar planos e execuções; padrão `./jmeter-workspace` no diretório de onde o servidor for iniciado
+- Node.js 18+
+- JMeter installed locally, with the `JMETER_HOME` environment variable
+  pointing at the installation directory (the one containing `bin/jmeter`).
+  On macOS via Homebrew, `brew install jmeter` puts it at
+  `/opt/homebrew/opt/jmeter/libexec`.
 
-## Adicionando esse MCP no Claude Code
+## Adding this server to Claude Code
 
-### Via npx (recomendado, publicado no npm)
+### Via npx (recommended — published on npm)
 
-Sem precisar clonar nem buildar nada — o `npx` baixa e roda a versão publicada
-na hora:
+No cloning or building required; `npx` fetches and runs the published
+version on the fly:
 
 ```bash
 claude mcp add jmeter \
@@ -64,12 +129,12 @@ claude mcp add jmeter \
   -- npx -y jmeter-mcp-server
 ```
 
-Ajuste o caminho do `JMETER_HOME` para onde o JMeter estiver instalado na sua
-máquina. Opcionalmente, defina também `JMETER_MCP_WORKSPACE` com `-e` se
-quiser que os planos fiquem em outro lugar.
+Adjust the `JMETER_HOME` path to wherever JMeter is installed on your
+machine. Optionally set `JMETER_MCP_WORKSPACE` too (see below) if you want
+plans and executions stored somewhere other than the default.
 
-Por padrão o escopo é `local` (só neste diretório de projeto). Para deixar
-disponível em qualquer projeto, use `-s user`:
+The default scope is `local` (this project directory only). To make it
+available across every project, add `-s user`:
 
 ```bash
 claude mcp add jmeter -s user \
@@ -77,27 +142,28 @@ claude mcp add jmeter -s user \
   -- npx -y jmeter-mcp-server
 ```
 
-Confira que o servidor foi registrado e está respondendo com:
+Confirm it registered and is responding:
 
 ```bash
 claude mcp list
 ```
 
-### Via clone local (desenvolvimento)
+### From a local clone (development)
 
-Se você está mexendo no código deste repositório em vez de usar a versão
-publicada, aponte direto para o `dist/index.js` depois do build:
+If you're working on this repository's code instead of using the published
+package, point at the built `dist/index.js` directly:
 
 ```bash
+npm install
+npm run build
 claude mcp add jmeter \
   -e JMETER_HOME=/opt/homebrew/opt/jmeter/libexec \
-  -- node /Users/juliodelimas/projects/jmeter-mcp-server/dist/index.js
+  -- node /absolute/path/to/jmeter-mcp-server/dist/index.js
 ```
 
 ### Claude Desktop
 
-Se preferir usar no Claude Desktop, adicione em
-`~/Library/Application Support/Claude/claude_desktop_config.json`:
+Add this to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
@@ -113,9 +179,38 @@ Se preferir usar no Claude Desktop, adicione em
 }
 ```
 
-## Escopo da v1
+Note: unlike a terminal-launched app, Claude Desktop does **not** inherit
+environment variables exported in your shell profile (`.zshrc`, etc.) — only
+true system-wide ones. Always set `JMETER_HOME` explicitly in the `env`
+block above rather than relying on it already being "set on your machine".
 
-Fora do escopo por enquanto (fica pra próxima leva): editar/remover elementos
-já criados, importar um `.jmx` externo, gerar o dashboard HTML (`-e -o`),
-outros tipos de sampler/assertion/extractor, CSV Data Set Config, execução
-distribuída.
+## Environment variables
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `JMETER_HOME` | Yes | JMeter installation directory (must contain `bin/jmeter`) |
+| `JMETER_MCP_WORKSPACE` | No | Where plans and executions are stored. Defaults to `./jmeter-workspace` relative to wherever the server process starts |
+
+## Workspace layout
+
+```
+<workspace>/
+  plans/<planId>/plan.json           # JSON tree — source of truth for a plan
+  executions/<executionId>/
+    generated.jmx                    # serialized at execute_test_plan time
+    aggregate-report.jtl             # output of the Aggregate Report listener, if present
+    summary-report.jtl               # output of the Summary Report listener, if present
+    jmeter.log
+    meta.json                        # execution status, pid, timestamps, exit code
+```
+
+## v1 scope
+
+Not yet supported (candidates for a future release): editing/removing
+existing elements, importing an externally authored `.jmx`, generating the
+HTML dashboard report (`-e -o`), other sampler/assertion/extractor types,
+CSV Data Set Config, distributed execution.
+
+## License
+
+MIT
