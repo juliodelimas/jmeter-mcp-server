@@ -1,0 +1,48 @@
+{
+  "name": "jmeter-mcp-server",
+  "version": "0.1.0",
+  "description": "Stdio MCP server to build, run and read reports for JMeter test plans",
+  "main": "dist/index.js",
+  "bin": {
+    "jmeter-mcp-server": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "prepublishOnly": "npm run build",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "jmeter",
+    "load-testing",
+    "performance-testing"
+  ],
+  "author": "Julio de Lima",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/juliodelimas/jmeter-mcp-server.git"
+  },
+  "homepage": "https://github.com/juliodelimas/jmeter-mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/juliodelimas/jmeter-mcp-server/issues"
+  },
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.3.0",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
+  }
+}
