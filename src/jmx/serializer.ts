@@ -244,7 +244,7 @@ function renderElement(node: TestNode, opts: SerializeOptions): string {
       return renderResultCollector(
         node,
         "Aggregate Report",
-        "StatVisualizerModel",
+        "StatVisualizer",
         opts.aggregateFilename,
       );
     case "ResultCollectorSummary":
