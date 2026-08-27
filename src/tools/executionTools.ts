@@ -59,11 +59,12 @@ export function registerExecutionTools(server: McpServer): void {
     },
     ({ executionId }) => {
       const meta = readMeta(executionId);
-      const sourceFile = meta.aggregateFilename ?? meta.summaryFilename;
+      const sourceFile = meta.aggregateFilename ?? meta.summaryFilename ?? meta.viewResultsTreeFilename;
       if (!sourceFile) {
         throw new Error(
-          "This test plan has no Aggregate Report or Summary Report listener, so there's nothing to read. " +
-            "Add one with add_aggregate_report_listener or add_summary_report_listener before running.",
+          "This test plan has no Aggregate Report, Summary Report, or View Results Tree listener, so there's " +
+            "nothing to read. Add one with add_aggregate_report_listener, add_summary_report_listener, or " +
+            "add_view_results_tree_listener before running.",
         );
       }
       if (!existsSync(sourceFile)) {

@@ -1,67 +1,56 @@
 # jmeter-mcp-server
 
-A stdio [MCP](https://modelcontextprotocol.io/) server for building,
-maintaining, running, and reading reports for [Apache JMeter](https://jmeter.apache.org/)
-test plans — without opening the GUI.
+Give an LLM real, deterministic control over [Apache JMeter](https://jmeter.apache.org/) — build test plans, run real load tests, and read back real results, without ever hand-writing `.jmx` XML or opening the GUI.
 
-Point an MCP-capable client (Claude Code, Claude Desktop, etc.) at this
-server and it can compose a test plan element by element, kick off a real
-non-GUI JMeter run in the background, and read back aggregated latency/error
-stats, all through typed tool calls instead of clicking through JMeter's
-tree view.
+```
+"Load test my API: 20 users hitting POST /orders for 2 minutes,
+ 5% think time, fail anything over 800ms"
+```
 
-## Why an MCP server for this, specifically
+...turns into a running JMeter test and a real report, through typed tool calls an MCP client (Claude Code, Claude Desktop, etc.) makes directly.
 
-An LLM can already write a `.jmx` file from scratch — it's just XML. The
-problem is that JMeter's `.jmx` format is a `hashTree` structure with a lot
-of fragile, easy-to-get-subtly-wrong detail: exact `guiclass`/`testclass`
-pairs per element, property names that don't always match the GUI label
-(`ThreadGroup.num_threads` is a `stringProp`, not an `intProp`; assertion
-match types are an integer *bitmask*), and strict parent/child pairing
-between every element and its sibling `<hashTree>`. None of that is
-self-checking — a slightly wrong bitmask still produces valid, loadable XML
-that just quietly does the wrong thing (an assertion that never fires, a
-listener with no output). Re-deriving all of that from memory on every
-request means re-risking the same mistakes every time.
+## Why not just ask an LLM to write the `.jmx` itself?
 
-This server encodes that knowledge exactly once, in a serializer that's been
-exercised against a real JMeter install, and exposes it as typed tools. The
-concrete benefits that come out of that:
+It can — a `.jmx` is just XML, and any capable model has seen plenty of JMeter test plans. The problem is *how* it fails: JMeter's format is a `hashTree` with dozens of fragile, easy-to-misremember details — exact `guiclass`/`testclass` pairs, property names that don't match their GUI label (`ThreadGroup.num_threads` is a `stringProp`, not an `intProp`), integer *bitmasks* for assertion match types, strict parent/child pairing with sibling `<hashTree>` tags. None of it is self-checking. A wrong value still produces valid, loadable XML that just quietly does the wrong thing.
 
-- **Correctness through a fixed, tested code path.** Every `add_http_sampler`
-  call goes through the same verified serializer, instead of an LLM
-  regenerating XML from memory each time with a chance of drift or a subtly
-  wrong property.
-- **Cheap incremental edits.** A test plan is stored as a small JSON tree
-  with stable node ids. Adding one more assertion is a single tool call
-  referencing a `parentId` — not reading and rewriting an entire `.jmx` file
-  to figure out where to splice in a change. In a quick side-by-side on a
-  6-element plan, the JSON tree came out to ~280 tokens versus ~1,580 tokens
-  for the equivalent `.jmx` XML (which repeats `guiclass`/`testclass` pairs
-  and a full `saveConfig` block per listener) — and that gap only widens as
-  a plan grows, since editing the JSON tree costs *one small tool call*
-  regardless of how large the overall plan already is.
-- **Aggregated results, not raw samples.** `get_execution_report` parses the
-  JTL output and returns computed stats (count, error %, avg/min/max/median,
-  p90/p95/p99, throughput, KB/s) — not a dump of every sample row for the
-  client to average by hand.
-- **A real async execution model.** `execute_test_plan` starts JMeter in
-  the background and returns immediately with an `executionId`;
-  `get_execution_status` / `get_execution_report` poll it. Long-running load
-  tests don't block anything waiting for a single request/response.
+That's not hypothetical — it happened building this project. An early version of the If Controller generated a property called `useExpression` set to `true`, which reads like "yes, evaluate my condition." The real JMeter source does the opposite: `useExpression=true` means *don't* evaluate it as an expression — just check if the string is literally `"true"`. Every non-trivial condition silently, permanently failed. No error, no warning — the child sampler just never ran. It only surfaced by actually executing the generated plan against real JMeter and noticing a sample count of zero.
 
-The generated `.jmx` follows the same format JMeter itself writes, so it can
-still be opened in the real JMeter GUI at any point if you want to eyeball
-it visually or hand it off to someone who prefers the UI.
+That's the whole case for this server in one story: an LLM regenerating XML from memory re-risks that exact mistake on every single request. This server encodes the correct shape **once**, in a serializer checked against real JMeter source and bundled examples, exercised by [97 automated tests](#testing) including real JMeter runs — and exposes it as typed tools instead. Concretely:
+
+- **Correctness through one tested code path**, not regenerated-from-memory XML every time.
+- **Cheap incremental edits.** Plans are a small JSON tree with stable node ids — adding an assertion is one tool call with a `parentId`, not rewriting a whole `.jmx` file.
+- **Aggregated results, not raw samples.** `get_execution_report` returns computed stats (error %, avg/median/p90/p95/p99, throughput) — not thousands of sample rows to average by hand.
+- **Real async execution.** `execute_test_plan` returns immediately with an `executionId`; long-running load tests never block anything.
+
+The generated `.jmx` is standard JMeter output — open it in the real GUI any time.
+
+## Example
+
+```
+You:    Build a load test: 10 users for 30s hitting GET https://api.example.com/health,
+        fail anything that takes over 500ms, then run it and tell me the p95.
+
+Claude: [create_test_plan, add_thread_group, add_http_sampler, add_duration_assertion,
+         add_aggregate_report_listener, execute_test_plan, get_execution_status, get_execution_report]
+
+        Ran 300 requests over 30s, 0 failures. p95 latency: 214ms, avg: 187ms, throughput: 10.1 req/s.
+```
+
+Every step above is a real typed MCP tool call — see [Tools](#tools) for the full set (30+ elements: samplers, controllers, timers, extractors, assertions, listeners) and [Example workflow](#example-workflow) for the raw call sequence.
+
+## Quick start
+
+```bash
+claude mcp add jmeter \
+  -e JMETER_HOME=/opt/homebrew/opt/jmeter/libexec \
+  -- npx -y jmeter-mcp-server
+```
+
+That's it — no cloning, no build. Adjust `JMETER_HOME` to your JMeter install (see [Prerequisites](#prerequisites)). Full setup details, Claude Desktop config, and local-dev instructions are in [Adding this server to Claude Code](#adding-this-server-to-claude-code).
 
 ## How a test plan is represented
 
-Each plan is stored as a JSON tree (`{id, type, props, children[]}`) rather
-than as XML text. All authoring tools mutate this tree by appending a child
-under a given `parentId`, and the tree is only serialized into a real `.jmx`
-file at execution time. This is what makes incremental edits cheap and keeps
-the fiddly XML schema knowledge in one place (`src/jmx/serializer.ts`)
-instead of spread across every tool.
+Each plan is a JSON tree (`{id, type, props, children[]}`), not XML text. Authoring tools append a child under a given `parentId`; the tree is only serialized to a real `.jmx` file at execution time. This is what makes incremental edits cheap and keeps all the fiddly XML schema knowledge in one place (`src/jmx/serializer.ts`) instead of spread across every tool.
 
 ## Tools
 
@@ -78,6 +67,36 @@ whatever you attach under it next):
 | `add_response_assertion` | Response Assertion |
 | `add_aggregate_report_listener` | Aggregate Report listener |
 | `add_summary_report_listener` | Summary Report listener |
+| `add_csv_data_set` | CSV Data Set Config (parameterization from a file) |
+| `add_user_defined_variables` | User Defined Variables |
+| `add_constant_timer` | Constant Timer (pacing/think-time) |
+| `add_regex_extractor` | Regular Expression Extractor post-processor |
+| `add_transaction_controller` | Transaction Controller (groups child samplers into one named transaction) |
+| `add_loop_controller` | Loop Controller (repeats child samplers) |
+| `add_if_controller` | If Controller (conditionally runs child samplers) |
+| `add_jdbc_connection_configuration` | JDBC Connection Configuration (pooled datasource) |
+| `add_jdbc_request` | JDBC Request sampler |
+| `add_jsr223_sampler` | JSR223 Sampler (Groovy/BeanShell/JS/JEXL script as the sample) |
+| `add_ftp_request` | FTP Request sampler |
+| `add_tcp_sampler` | TCP Sampler |
+| `add_http_request_defaults` | HTTP Request Defaults |
+| `add_cookie_manager` | HTTP Cookie Manager |
+| `add_while_controller` | While Controller (repeats children while a condition holds) |
+| `add_random_controller` | Random Controller (runs one random child per pass) |
+| `add_interleave_controller` | Interleave Controller (alternates through children) |
+| `add_setup_thread_group` | setUp Thread Group (runs once before all Thread Groups) |
+| `add_teardown_thread_group` | tearDown Thread Group (runs once after all Thread Groups) |
+| `add_xpath_extractor` | XPath Extractor post-processor |
+| `add_jsr223_preprocessor` | JSR223 PreProcessor |
+| `add_jsr223_postprocessor` | JSR223 PostProcessor |
+| `add_user_parameters` | User Parameters (per-thread variable value sets) |
+| `add_json_assertion` | JSON Assertion (JSONPath validation) |
+| `add_duration_assertion` | Duration Assertion (response-time SLA) |
+| `add_size_assertion` | Size Assertion (response byte-size check) |
+| `add_uniform_random_timer` | Uniform Random Timer (randomized pacing) |
+| `add_constant_throughput_timer` | Constant Throughput Timer (target rate pacing) |
+| `add_view_results_tree_listener` | View Results Tree listener (full request/response capture for debugging) |
+| `add_backend_listener` | Backend Listener (streams live metrics to InfluxDB/Graphite/etc.) |
 
 **Inspection:**
 
@@ -107,6 +126,22 @@ execute_test_plan             (planId) → { executionId }
 get_execution_status           (executionId)   ← poll until "completed"
 get_execution_report            (executionId) → aggregated latency/error stats
 ```
+
+## Testing
+
+97 automated tests, no framework beyond Node's built-in test runner:
+
+```bash
+npm test               # 86 tests: XML-shape unit tests + every tool called over the real MCP
+                        # protocol (stdio, the same way Claude Code/Desktop talk to it) - no
+                        # JMeter install needed, fully hermetic
+npm run test:integration  # 11 tests: real JMeter runs - the If Controller story above, While
+                        # Controller loop counts, timer pacing, extractors, assertions, etc.
+                        # (needs JMETER_HOME)
+npm run test:all
+```
+
+`npm test` spawns the actual built server (`dist/index.js`) via `StdioClientTransport` and drives it exactly as a real client would — not just calling internal functions — so a broken tool schema or a malformed response shows up as a real protocol error, not a passing unit test.
 
 ## Prerequisites
 
@@ -208,8 +243,40 @@ block above rather than relying on it already being "set on your machine".
 
 Not yet supported (candidates for a future release): editing/removing
 existing elements, importing an externally authored `.jmx`, generating the
-HTML dashboard report (`-e -o`), other sampler/assertion/extractor types,
-CSV Data Set Config, distributed execution.
+HTML dashboard report (`-e -o`), parent-type validation on `add_*` tools
+(nothing stops attaching an element under a semantically wrong parent),
+distributed execution.
+
+Note on `add_csv_data_set`: the `filename` must be an absolute path.
+`execute_test_plan` runs JMeter from a fresh per-execution directory, so a
+relative path (which JMeter's GUI would resolve against the `.jmx` file's
+own location) won't resolve there. An absolute path baked into a plan is
+also machine-specific — it won't travel if you share `plan.json` with
+someone on a different machine.
+
+Note on `add_jdbc_request`/`add_jdbc_connection_configuration`,
+`add_ftp_request`, and `add_backend_listener`: these generate correct,
+JMeter-loadable XML, but exercising them for real needs infrastructure this
+project doesn't provide (a database, an FTP server, an InfluxDB/Graphite
+instance) — they were verified structurally, not against a real backend.
+
+Note on `add_view_results_tree_listener`'s `captureFullData` option: it has
+no effect right now. `execute_test_plan` always runs JMeter with
+`-Jjmeter.save.saveservice.output_format=csv`, and JMeter's CSV writer never
+emits response body/header columns no matter what the `SampleSaveConfiguration`
+flags say — only its XML output format can carry full response bodies. The
+option is wired up correctly in the generated `.jmx` (verified: the flags
+really do flip in the XML) for the day this server supports XML-format runs,
+but until then it's a no-op — confirmed by running a real capture and
+checking the resulting JTL has no `responseData`/`samplerData`/
+`requestHeaders`/`responseHeaders` columns regardless of the setting.
+
+Note on `add_tcp_sampler`: `server`/`port`/`request` are live-verified. The
+numeric fields (`connectTimeoutMs`, `timeoutMs`) are rendered as
+`stringProp` following this project's general convention for sampler
+numeric fields, but that specific choice for `TCPSampler` wasn't confirmed
+against a real JMeter-GUI-saved example (none was available to check
+against) — flagging in case a real save turns out to expect `intProp`.
 
 ## License
 

@@ -21,6 +21,7 @@ export interface ExecutionMeta {
   stdoutLogPath: string;
   aggregateFilename?: string;
   summaryFilename?: string;
+  viewResultsTreeFilename?: string;
 }
 
 const registry = new Map<string, ChildProcess>();
@@ -62,8 +63,11 @@ export function startExecution(planId: string): { executionId: string; status: E
   const summaryFilename = hasNodeOfType(plan.root, "ResultCollectorSummary")
     ? path.join(execDir, "summary-report.jtl")
     : undefined;
+  const viewResultsTreeFilename = hasNodeOfType(plan.root, "ResultCollectorViewResultsTree")
+    ? path.join(execDir, "view-results-tree.jtl")
+    : undefined;
 
-  const jmx = serializePlan(plan.root, { aggregateFilename, summaryFilename });
+  const jmx = serializePlan(plan.root, { aggregateFilename, summaryFilename, viewResultsTreeFilename });
   writeFileSync(jmxPath, jmx, "utf-8");
 
   const stdoutFd = openSync(stdoutLogPath, "a");
@@ -84,6 +88,7 @@ export function startExecution(planId: string): { executionId: string; status: E
     stdoutLogPath,
     aggregateFilename,
     summaryFilename,
+    viewResultsTreeFilename,
   };
   writeMeta(meta);
   registry.set(executionId, child);
