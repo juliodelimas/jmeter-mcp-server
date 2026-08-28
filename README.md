@@ -55,46 +55,93 @@ Each plan is a JSON tree (`{id, type, props, children[]}`), not XML text. Author
 ## Tools
 
 **Authoring** (each returns the new node's `id`, used as `parentId` for
-whatever you attach under it next):
+whatever you attach under it next) — grouped the same way JMeter's own
+right-click **Add** menu groups them, so if you already know the GUI, you
+already know where to look:
 
 | Tool | Adds |
 |---|---|
 | `create_test_plan` | Root `TestPlan` node — returns `planId` and the root node id |
+
+**Threads (Users):**
+
+| Tool | Adds |
+|---|---|
 | `add_thread_group` | Thread Group (virtual users) |
+| `add_setup_thread_group` | setUp Thread Group (runs once before all Thread Groups) |
+| `add_teardown_thread_group` | tearDown Thread Group (runs once after all Thread Groups) |
+
+**Sampler:**
+
+| Tool | Adds |
+|---|---|
 | `add_http_sampler` | HTTP Request sampler |
-| `add_json_extractor` | JSON Extractor post-processor |
-| `add_header_manager` | HTTP Header Manager |
-| `add_response_assertion` | Response Assertion |
-| `add_aggregate_report_listener` | Aggregate Report listener |
-| `add_summary_report_listener` | Summary Report listener |
-| `add_csv_data_set` | CSV Data Set Config (parameterization from a file) |
-| `add_user_defined_variables` | User Defined Variables |
-| `add_constant_timer` | Constant Timer (pacing/think-time) |
-| `add_regex_extractor` | Regular Expression Extractor post-processor |
-| `add_transaction_controller` | Transaction Controller (groups child samplers into one named transaction) |
-| `add_loop_controller` | Loop Controller (repeats child samplers) |
-| `add_if_controller` | If Controller (conditionally runs child samplers) |
-| `add_jdbc_connection_configuration` | JDBC Connection Configuration (pooled datasource) |
 | `add_jdbc_request` | JDBC Request sampler |
 | `add_jsr223_sampler` | JSR223 Sampler (Groovy/BeanShell/JS/JEXL script as the sample) |
 | `add_ftp_request` | FTP Request sampler |
 | `add_tcp_sampler` | TCP Sampler |
-| `add_http_request_defaults` | HTTP Request Defaults |
-| `add_cookie_manager` | HTTP Cookie Manager |
+
+**Logic Controller:**
+
+| Tool | Adds |
+|---|---|
+| `add_transaction_controller` | Transaction Controller (groups child samplers into one named transaction) |
+| `add_loop_controller` | Loop Controller (repeats child samplers) |
+| `add_if_controller` | If Controller (conditionally runs child samplers) |
 | `add_while_controller` | While Controller (repeats children while a condition holds) |
 | `add_random_controller` | Random Controller (runs one random child per pass) |
 | `add_interleave_controller` | Interleave Controller (alternates through children) |
-| `add_setup_thread_group` | setUp Thread Group (runs once before all Thread Groups) |
-| `add_teardown_thread_group` | tearDown Thread Group (runs once after all Thread Groups) |
-| `add_xpath_extractor` | XPath Extractor post-processor |
+
+**Config Element:**
+
+| Tool | Adds |
+|---|---|
+| `add_csv_data_set` | CSV Data Set Config (parameterization from a file) |
+| `add_user_defined_variables` | User Defined Variables |
+| `add_jdbc_connection_configuration` | JDBC Connection Configuration (pooled datasource) |
+| `add_http_request_defaults` | HTTP Request Defaults |
+| `add_cookie_manager` | HTTP Cookie Manager |
+| `add_header_manager` | HTTP Header Manager |
+
+**Timer:**
+
+| Tool | Adds |
+|---|---|
+| `add_constant_timer` | Constant Timer (pacing/think-time) |
+| `add_uniform_random_timer` | Uniform Random Timer (randomized pacing) |
+| `add_constant_throughput_timer` | Constant Throughput Timer (target rate pacing) |
+
+**Pre Processors:**
+
+| Tool | Adds |
+|---|---|
 | `add_jsr223_preprocessor` | JSR223 PreProcessor |
-| `add_jsr223_postprocessor` | JSR223 PostProcessor |
 | `add_user_parameters` | User Parameters (per-thread variable value sets) |
+
+**Post Processors:**
+
+| Tool | Adds |
+|---|---|
+| `add_json_extractor` | JSON Extractor post-processor |
+| `add_regex_extractor` | Regular Expression Extractor post-processor |
+| `add_xpath_extractor` | XPath Extractor post-processor |
+| `add_jsr223_postprocessor` | JSR223 PostProcessor |
+
+**Assertions:**
+
+| Tool | Adds |
+|---|---|
+| `add_response_assertion` | Response Assertion |
 | `add_json_assertion` | JSON Assertion (JSONPath validation) |
 | `add_duration_assertion` | Duration Assertion (response-time SLA) |
 | `add_size_assertion` | Size Assertion (response byte-size check) |
-| `add_uniform_random_timer` | Uniform Random Timer (randomized pacing) |
-| `add_constant_throughput_timer` | Constant Throughput Timer (target rate pacing) |
+
+**Listener:**
+
+| Tool | Adds |
+|---|---|
+| `add_aggregate_report_listener` | Aggregate Report listener |
+| `add_summary_report_listener` | Summary Report listener |
 | `add_view_results_tree_listener` | View Results Tree listener (full request/response capture for debugging) |
 | `add_backend_listener` | Backend Listener (streams live metrics to InfluxDB/Graphite/etc.) |
 
