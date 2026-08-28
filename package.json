@@ -1,6 +1,6 @@
 {
   "name": "jmeter-mcp-server",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Stdio MCP server to build, run and read reports for JMeter test plans",
   "main": "dist/index.js",
   "bin": {
