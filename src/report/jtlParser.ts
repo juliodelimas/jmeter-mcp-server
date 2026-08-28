@@ -10,39 +10,82 @@ export interface SampleResult {
   latency: number;
 }
 
-function splitCsvLine(line: string): string[] {
-  const fields: string[] = [];
-  let current = "";
+/**
+ * RFC 4180 CSV tokenizer: row boundaries are only recognized outside quoted
+ * fields, so a quoted field spanning multiple physical lines (e.g. a
+ * multi-line responseMessage/failureMessage from a stack trace or HTML error
+ * body) stays part of the same row instead of corrupting the row count.
+ */
+function parseCsvRows(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
   let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
+  let i = 0;
+  const n = text.length;
+
+  const endField = () => {
+    row.push(field);
+    field = "";
+  };
+  const endRow = () => {
+    endField();
+    rows.push(row);
+    row = [];
+  };
+
+  while (i < n) {
+    const ch = text[i];
     if (inQuotes) {
-      if (ch === '"' && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else if (ch === '"') {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i += 2;
+          continue;
+        }
         inQuotes = false;
-      } else {
-        current += ch;
+        i++;
+        continue;
       }
-    } else if (ch === '"') {
-      inQuotes = true;
-    } else if (ch === ",") {
-      fields.push(current);
-      current = "";
-    } else {
-      current += ch;
+      field += ch;
+      i++;
+      continue;
     }
+    if (ch === '"') {
+      inQuotes = true;
+      i++;
+      continue;
+    }
+    if (ch === ",") {
+      endField();
+      i++;
+      continue;
+    }
+    if (ch === "\r") {
+      if (text[i + 1] === "\n") i++;
+      endRow();
+      i++;
+      continue;
+    }
+    if (ch === "\n") {
+      endRow();
+      i++;
+      continue;
+    }
+    field += ch;
+    i++;
   }
-  fields.push(current);
-  return fields;
+  if (field.length > 0 || row.length > 0) {
+    endRow();
+  }
+  return rows;
 }
 
 export function parseJtl(filePath: string): SampleResult[] {
-  const raw = readFileSync(filePath, "utf-8").trim();
-  if (!raw) return [];
-  const lines = raw.split(/\r?\n/);
-  const header = splitCsvLine(lines[0]);
+  const raw = readFileSync(filePath, "utf-8");
+  const rows = parseCsvRows(raw).filter((r) => !(r.length === 1 && r[0] === ""));
+  if (rows.length === 0) return [];
+  const header = rows[0];
   const col = (name: string) => header.indexOf(name);
 
   const idx = {
@@ -56,9 +99,8 @@ export function parseJtl(filePath: string): SampleResult[] {
   };
 
   const results: SampleResult[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    if (!lines[i]) continue;
-    const fields = splitCsvLine(lines[i]);
+  for (let i = 1; i < rows.length; i++) {
+    const fields = rows[i];
     results.push({
       timestamp: Number(fields[idx.timeStamp] ?? 0),
       elapsed: Number(fields[idx.elapsed] ?? 0),
