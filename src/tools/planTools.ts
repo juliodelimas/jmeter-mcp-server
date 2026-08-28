@@ -83,15 +83,19 @@ export function registerPlanTools(server: McpServer): void {
   server.registerTool(
     "add_http_sampler",
     {
-      description: "Add an HTTP Request sampler under the given parent node (usually a Thread Group).",
+      description:
+        "Add an HTTP Request sampler under the given parent node (usually a Thread Group). Omit protocol/domain/" +
+        "port entirely (don't just leave them out - they have no default) to inherit those fields from an " +
+        "HTTP Request Defaults config element in scope (add_http_request_defaults). Passing an explicit value " +
+        "always overrides the Defaults for that field.",
       inputSchema: {
         planId: z.string(),
         parentId: z.string(),
         name: z.string(),
         method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]),
-        protocol: z.enum(["http", "https"]).default("https"),
-        domain: z.string().describe("Host name, e.g. api.example.com"),
-        port: z.number().int().positive().optional(),
+        protocol: z.enum(["http", "https"]).optional().describe("Omit to inherit from HTTP Request Defaults"),
+        domain: z.string().describe("Host name, e.g. api.example.com. Omit to inherit from HTTP Request Defaults").optional(),
+        port: z.number().int().positive().optional().describe("Omit to inherit from HTTP Request Defaults"),
         path: z.string().describe("Request path, e.g. /v1/users"),
         bodyJson: z.string().describe("Raw JSON request body, if any").optional(),
       },

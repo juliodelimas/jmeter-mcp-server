@@ -68,8 +68,8 @@ ${boolProp("ThreadGroup.same_user_on_next_iteration", true)}
 
 interface HttpSamplerProps {
   method: string;
-  protocol: string;
-  domain: string;
+  protocol?: string;
+  domain?: string;
   port?: number;
   path: string;
   bodyJson?: string;
@@ -96,9 +96,9 @@ function renderHttpSampler(node: TestNode): string {
   const p = node.props as unknown as HttpSamplerProps;
   return `<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="${esc(node.name)}" enabled="true">
 ${renderHttpArguments(p.bodyJson)}
-${stringProp("HTTPSampler.domain", p.domain)}
+${stringProp("HTTPSampler.domain", p.domain ?? "")}
 ${stringProp("HTTPSampler.port", p.port ?? "")}
-${stringProp("HTTPSampler.protocol", p.protocol)}
+${stringProp("HTTPSampler.protocol", p.protocol ?? "")}
 ${stringProp("HTTPSampler.path", p.path)}
 ${stringProp("HTTPSampler.method", p.method)}
 ${boolProp("HTTPSampler.follow_redirects", true)}

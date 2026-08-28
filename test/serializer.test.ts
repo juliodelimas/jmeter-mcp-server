@@ -66,6 +66,18 @@ test("HTTPSamplerProxy", () => {
   const xml = xmlOf(node);
   assertTag(xml, "HTTPSamplerProxy", "HttpTestSampleGui");
   assertProp(xml, "stringProp", "HTTPSampler.domain", "example.org");
+});
+
+test("HTTPSamplerProxy leaves protocol/domain/port empty when omitted, so HTTP Request Defaults can fill them in", () => {
+  // Regression guard: a real user hit this. protocol used to default to "https" in the tool
+  // schema, which baked a non-empty value into every sampler and silently overrode
+  // add_http_request_defaults every time, even when the caller never asked for https.
+  // JMeter's Config Element inheritance only fills in a property that is genuinely empty.
+  const node = createNode("HTTPSamplerProxy", "Inherits", { method: "GET", path: "/users" });
+  const xml = xmlOf(node);
+  assertProp(xml, "stringProp", "HTTPSampler.protocol", "");
+  assertProp(xml, "stringProp", "HTTPSampler.domain", "");
+  assertProp(xml, "stringProp", "HTTPSampler.port", "");
   assertProp(xml, "stringProp", "HTTPSampler.method", "GET");
 });
 

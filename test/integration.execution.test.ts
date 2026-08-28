@@ -1,5 +1,6 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { createServer, type Server } from "node:http";
 import { startServer, callTool, type TestServer } from "./support/mcpClient.js";
 import { resolveJmeterBin } from "../src/jmeter.js";
 
@@ -461,3 +462,64 @@ test("get_execution_report falls back to View Results Tree when there's no Aggre
   const report = await runPlan(planId);
   assert.equal(label(report, "Only Sample").count, 1);
 });
+
+test(
+  "HTTP Request Defaults: a sampler that omits protocol/domain/port actually inherits them",
+  { skip: skip && skipReason },
+  async () => {
+    // Regression guard: a real user hit this. add_http_sampler's `protocol` field used to
+    // default to "https" in the tool schema, which baked a non-empty value into every
+    // sampler and silently overrode add_http_request_defaults every single time - even
+    // when the caller never asked for https. JMeter's Config Element inheritance only
+    // fills in a sampler property that is genuinely empty. This test proves the fix by
+    // actually connecting to a local HTTP server whose host/port only exist in the
+    // Defaults element, never on the sampler itself.
+    let received: { method?: string; url?: string } | null = null;
+    const localServer: Server = createServer((req, res) => {
+      received = { method: req.method, url: req.url };
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end("ok");
+    });
+    await new Promise<void>((resolve) => localServer.listen(0, "127.0.0.1", resolve));
+    const port = (localServer.address() as any).port;
+
+    try {
+      const { planId, rootNodeId } = await callTool(server.client, "create_test_plan", {
+        name: "HTTP Request Defaults Inheritance",
+      });
+      await callTool(server.client, "add_http_request_defaults", {
+        planId,
+        parentId: rootNodeId,
+        protocol: "http",
+        domain: "127.0.0.1",
+        port,
+      });
+      const { nodeId: tg } = await callTool(server.client, "add_thread_group", {
+        planId,
+        parentId: rootNodeId,
+        name: "Users",
+        numThreads: 1,
+        rampTimeSeconds: 1,
+        loops: 1,
+      });
+      // Deliberately omit protocol/domain/port - only `path` is sampler-specific.
+      await callTool(server.client, "add_http_sampler", {
+        planId,
+        parentId: tg,
+        name: "Inherited Call",
+        method: "GET",
+        path: "/from-defaults",
+      });
+      await callTool(server.client, "add_aggregate_report_listener", { planId, parentId: tg });
+
+      const report = await runPlan(planId);
+      const row = label(report, "Inherited Call");
+      assert.equal(row.errorPct, 0, "sampler failed to reach the local server via inherited protocol/domain/port");
+      assert.equal(row.count, 1);
+      assert.ok(received, "local server never received a request - inheritance did not happen");
+      assert.equal((received as any).url, "/from-defaults");
+    } finally {
+      await new Promise<void>((resolve) => localServer.close(() => resolve()));
+    }
+  },
+);
