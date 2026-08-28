@@ -1,5 +1,11 @@
 # jmeter-mcp-server
 
+[![npm version](https://img.shields.io/npm/v/jmeter-mcp-server.svg)](https://www.npmjs.com/package/jmeter-mcp-server)
+[![CI](https://github.com/juliodelimas/jmeter-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/juliodelimas/jmeter-mcp-server/actions/workflows/ci.yml)
+[![Node.js](https://img.shields.io/node/v/jmeter-mcp-server.svg)](https://www.npmjs.com/package/jmeter-mcp-server)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5%2B-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![License: MIT](https://img.shields.io/npm/l/jmeter-mcp-server.svg)](LICENSE)
+
 Give an LLM real, deterministic control over [Apache JMeter](https://jmeter.apache.org/) — build test plans, run real load tests, and read back real results, without ever hand-writing `.jmx` XML or opening the GUI.
 
 ```
@@ -189,6 +195,8 @@ npm run test:all
 ```
 
 `npm test` spawns the actual built server (`dist/index.js`) via `StdioClientTransport` and drives it exactly as a real client would — not just calling internal functions — so a broken tool schema or a malformed response shows up as a real protocol error, not a passing unit test.
+
+Both suites run on every push and pull request via [GitHub Actions](.github/workflows/ci.yml) — the integration job installs a real JMeter binary on the runner, so it's exercising the same code path as a local run, not a mock.
 
 ## Prerequisites
 
