@@ -18,7 +18,7 @@
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "pretest": "npm run build",
-    "test": "tsx --test test/serializer.test.ts test/jtlParser.test.ts test/tools.stdio.test.ts test/workflow.stdio.test.ts",
+    "test": "tsx --test test/serializer.test.ts test/jtlParser.test.ts test/processManager.test.ts test/tools.stdio.test.ts test/workflow.stdio.test.ts",
     "test:integration": "npm run build && tsx --test test/integration.execution.test.ts",
     "test:all": "npm test && npm run test:integration"
   },

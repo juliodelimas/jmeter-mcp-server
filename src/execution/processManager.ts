@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { resolveJmeterBin } from "../jmeter.js";
@@ -47,6 +47,26 @@ function hasNodeOfType(root: TestNode, type: TestNode["type"]): boolean {
   return root.children.some((child) => hasNodeOfType(child, type));
 }
 
+/**
+ * Node refuses to spawn .bat/.cmd files directly on Windows (throws EINVAL) unless
+ * `shell: true` is set - see https://nodejs.org/en/blog/vulnerability/february-2024-security-releases
+ * (CVE-2024-27980). With `shell: true` on Windows, Node joins command+args with plain
+ * spaces before handing the line to cmd.exe, so we must quote any piece containing
+ * whitespace ourselves (JMETER_HOME and JMX paths routinely contain spaces).
+ */
+export function buildSpawnInvocation(
+  bin: string,
+  args: string[],
+  platform: NodeJS.Platform,
+): { command: string; args: string[]; shell: boolean } {
+  const isWindowsBatch = platform === "win32" && /\.(bat|cmd)$/i.test(bin);
+  if (!isWindowsBatch) {
+    return { command: bin, args, shell: false };
+  }
+  const quote = (value: string): string => (/[\s"]/.test(value) ? `"${value.replace(/"/g, '\\"')}"` : value);
+  return { command: quote(bin), args: args.map(quote), shell: true };
+}
+
 export function startExecution(planId: string): { executionId: string; status: ExecutionStatus } {
   const jmeterBin = resolveJmeterBin();
   const plan = readPlan(planId);
@@ -71,11 +91,16 @@ export function startExecution(planId: string): { executionId: string; status: E
   writeFileSync(jmxPath, jmx, "utf-8");
 
   const stdoutFd = openSync(stdoutLogPath, "a");
-  const child = spawn(
+  const invocation = buildSpawnInvocation(
     jmeterBin,
     ["-n", "-t", jmxPath, "-j", jmeterLogPath, "-Jjmeter.save.saveservice.output_format=csv"],
-    { cwd: execDir, stdio: ["ignore", stdoutFd, stdoutFd] },
+    process.platform,
   );
+  const child = spawn(invocation.command, invocation.args, {
+    cwd: execDir,
+    stdio: ["ignore", stdoutFd, stdoutFd],
+    shell: invocation.shell,
+  });
   closeSync(stdoutFd);
 
   const meta: ExecutionMeta = {
@@ -118,8 +143,14 @@ export function stopExecution(executionId: string): { stopped: boolean; message:
   if (meta.status !== "running") {
     return { stopped: false, message: `Execution is already ${meta.status}.` };
   }
-  const child = registry.get(executionId);
   try {
+    if (process.platform === "win32") {
+      // JMeter runs under cmd.exe (see buildSpawnInvocation), so killing just the
+      // registered pid would leave the actual java.exe orphaned; /t kills the tree.
+      execFileSync("taskkill", ["/pid", String(meta.pid), "/t", "/f"]);
+      return { stopped: true, message: "Terminated the JMeter process tree." };
+    }
+    const child = registry.get(executionId);
     if (child) {
       child.kill("SIGTERM");
     } else {
