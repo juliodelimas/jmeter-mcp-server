@@ -335,7 +335,12 @@ Note on `add_csv_data_set`: the `filename` must be an absolute path.
 relative path (which JMeter's GUI would resolve against the `.jmx` file's
 own location) won't resolve there. An absolute path baked into a plan is
 also machine-specific — it won't travel if you share `plan.json` with
-someone on a different machine.
+someone on a different machine. This is only checked at creation time:
+`add_csv_data_set` rejects a relative or nonexistent path up front, but
+later changing a `CSVDataSet`'s `filename` via `update_element`, or
+importing a `.jmx` that already has a relative one via `import_test_plan`,
+is not checked - it will only surface as a failure at `execute_test_plan`
+time.
 
 Note on `add_jdbc_request`/`add_jdbc_connection_configuration`,
 `add_ftp_request`, and `add_backend_listener`: these generate correct,
