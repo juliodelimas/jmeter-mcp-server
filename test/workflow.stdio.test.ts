@@ -120,3 +120,41 @@ test("controller children nest under the controller, not its parent", async () =
   assert.ok(transaction.children.some((c: any) => c.id === loopId));
   assert.ok(loop.children.some((c: any) => c.id === innerSamplerId));
 });
+
+test("build a plan, then edit it via update_element/move_element, and read back the resulting XML", async () => {
+  const { planId, rootNodeId } = await callTool(server.client, "create_test_plan", { name: "Edit Workflow" });
+  const { nodeId: threadGroupId } = await callTool(server.client, "add_thread_group", {
+    planId,
+    parentId: rootNodeId,
+    name: "Users",
+    numThreads: 1,
+    rampTimeSeconds: 1,
+    loops: 1,
+  });
+  const { nodeId: samplerId } = await callTool(server.client, "add_http_sampler", {
+    planId,
+    parentId: threadGroupId,
+    name: "Get Users",
+    method: "GET",
+    protocol: "https",
+    domain: "example.org",
+    path: "/users",
+  });
+  const { nodeId: timerId } = await callTool(server.client, "add_constant_timer", {
+    planId,
+    parentId: threadGroupId,
+    delayMs: 100,
+  });
+
+  await callTool(server.client, "update_element", { planId, nodeId: samplerId, props: { path: "/v2/users" } });
+  await callTool(server.client, "move_element", { planId, nodeId: timerId, newParentId: samplerId });
+  await callTool(server.client, "set_element_enabled", { planId, nodeId: samplerId, enabled: false });
+
+  const { xml } = await callTool(server.client, "get_test_plan_xml", { planId });
+  assert.match(xml, /<HTTPSamplerProxy[^>]*enabled="false"/);
+  assert.match(xml, /<stringProp name="HTTPSampler\.path">\/v2\/users<\/stringProp>/);
+
+  const samplerIndex = xml.indexOf("<HTTPSamplerProxy ");
+  const timerIndex = xml.indexOf("<ConstantTimer ");
+  assert.ok(timerIndex > samplerIndex, "timer must now be nested after the sampler, not before it");
+});

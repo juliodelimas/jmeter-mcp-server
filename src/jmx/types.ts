@@ -36,12 +36,15 @@ export type NodeType =
   | "UniformRandomTimer"
   | "ConstantThroughputTimer"
   | "ResultCollectorViewResultsTree"
-  | "BackendListener";
+  | "BackendListener"
+  | "UnknownElement";
 
 export interface TestNode {
   id: string;
   type: NodeType;
   name: string;
+  /** Absent means enabled (matches JMeter's own default). */
+  enabled?: boolean;
   props: Record<string, unknown>;
   children: TestNode[];
 }

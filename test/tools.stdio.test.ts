@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { startServer, callTool, expectToolError, type TestServer } from "./support/mcpClient.js";
+
+const FIXTURES_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
+const SAMPLE_IMPORT_JMX = path.join(FIXTURES_DIR, "sample-import.jmx");
 
 /** Recursively finds a node by id in the JSON tree returned by get_test_plan. */
 function findNode(node: any, id: string): any {
@@ -319,6 +323,186 @@ for (const c of cases) {
     c.check?.(node.props);
   });
 }
+
+test("get_test_plan_xml serializes without running JMeter", async () => {
+  const { xml } = await callTool(server.client, "get_test_plan_xml", { planId });
+  assert.match(xml, /<jmeterTestPlan/);
+  assert.match(xml, /<HTTPSamplerProxy[^>]*testname="Get Users"/);
+});
+
+test("import_test_plan imports a real .jmx, keeping unrecognized elements as UnknownElement", async () => {
+  const imported = await callTool(server.client, "import_test_plan", { filePath: SAMPLE_IMPORT_JMX });
+  assert.ok(imported.planId);
+  assert.ok(imported.rootNodeId);
+  assert.equal(imported.unknownElementCount, 1);
+  assert.deepEqual(imported.unknownElementTypes, ["JSR223Sampler"]);
+
+  const tree = await callTool(server.client, "get_test_plan", { planId: imported.planId });
+  assert.equal(tree.root.type, "TestPlan");
+  assert.equal(tree.root.name, "Imported Plan");
+  const threadGroup = tree.root.children.find((c: any) => c.type === "ThreadGroup");
+  assert.ok(threadGroup);
+  const sampler = threadGroup.children.find((c: any) => c.type === "HTTPSamplerProxy");
+  assert.ok(sampler);
+  assert.equal(sampler.props.path, "/users");
+  const unknownNode = threadGroup.children.find((c: any) => c.type === "UnknownElement");
+  assert.ok(unknownNode);
+  assert.match(unknownNode.props.rawXml, /<JSR223Sampler/);
+
+  const { xml } = await callTool(server.client, "get_test_plan_xml", { planId: imported.planId });
+  assert.match(xml, /<JSR223Sampler[^>]*testname="Custom Script"/);
+});
+
+test("import_test_plan lets an imported plan be edited with the same tools as a built one", async () => {
+  const imported = await callTool(server.client, "import_test_plan", { filePath: SAMPLE_IMPORT_JMX, name: "Renamed On Import" });
+  const listed = await callTool(server.client, "list_test_plans", {});
+  assert.ok(listed.some((p: any) => p.planId === imported.planId && p.name === "Renamed On Import"));
+
+  const tree = await callTool(server.client, "get_test_plan", { planId: imported.planId });
+  const sampler = findNode(tree.root, tree.root.children[0].children[0].id);
+  await callTool(server.client, "update_element", { planId: imported.planId, nodeId: sampler.id, props: { path: "/v2/users" } });
+  const after = await callTool(server.client, "get_test_plan", { planId: imported.planId });
+  assert.equal(findNode(after.root, sampler.id).props.path, "/v2/users");
+});
+
+test("import_test_plan rejects a relative path", async () => {
+  const message = await expectToolError(server.client, "import_test_plan", { filePath: "relative/plan.jmx" });
+  assert.match(message, /absolute path/i);
+});
+
+test("import_test_plan rejects a nonexistent path", async () => {
+  const message = await expectToolError(server.client, "import_test_plan", { filePath: "/definitely/does/not/exist.jmx" });
+  assert.match(message, /not found/i);
+});
+
+test("import_test_plan rejects a document whose root element isn't TestPlan", async () => {
+  const badFile = path.join(csvFixtureDir, "not-a-plan.jmx");
+  writeFileSync(
+    badFile,
+    `<?xml version="1.0"?><jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3"><hashTree>` +
+      `<ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Users" enabled="true">` +
+      `<stringProp name="ThreadGroup.num_threads">1</stringProp></ThreadGroup><hashTree/></hashTree></jmeterTestPlan>`,
+    "utf-8",
+  );
+  const message = await expectToolError(server.client, "import_test_plan", { filePath: badFile });
+  assert.match(message, /must be <TestPlan>/);
+});
+
+test("update_element merges props by default", async () => {
+  const { props } = await callTool(server.client, "update_element", {
+    planId,
+    nodeId: samplerId,
+    props: { path: "/updated-path" },
+  });
+  assert.equal(props.path, "/updated-path");
+  assert.equal(props.method, "GET");
+});
+
+test("update_element with a null prop value deletes that key", async () => {
+  const { props } = await callTool(server.client, "update_element", {
+    planId,
+    nodeId: samplerId,
+    props: { bodyJson: "irrelevant" },
+  });
+  assert.ok("bodyJson" in props);
+  const { props: after } = await callTool(server.client, "update_element", {
+    planId,
+    nodeId: samplerId,
+    props: { bodyJson: null },
+  });
+  assert.ok(!("bodyJson" in after));
+});
+
+test("update_element rejects a patch that fails the type's prop schema", async () => {
+  const message = await expectToolError(server.client, "update_element", {
+    planId,
+    nodeId: samplerId,
+    props: { method: "NOT_A_METHOD" },
+  });
+  assert.match(message, /Invalid props for HTTPSamplerProxy/);
+});
+
+test("rename_element renames the node", async () => {
+  const { name } = await callTool(server.client, "rename_element", {
+    planId,
+    nodeId: samplerId,
+    name: "Renamed Sampler",
+  });
+  assert.equal(name, "Renamed Sampler");
+  const tree = await callTool(server.client, "get_test_plan", { planId });
+  assert.equal(findNode(tree.root, samplerId).name, "Renamed Sampler");
+});
+
+test("set_element_enabled disables and re-enables a node", async () => {
+  const { enabled } = await callTool(server.client, "set_element_enabled", {
+    planId,
+    nodeId: samplerId,
+    enabled: false,
+  });
+  assert.equal(enabled, false);
+  const { xml } = await callTool(server.client, "get_test_plan_xml", { planId });
+  assert.match(xml, /<HTTPSamplerProxy[^>]*enabled="false"/);
+
+  await callTool(server.client, "set_element_enabled", { planId, nodeId: samplerId, enabled: true });
+  const { xml: xmlAfter } = await callTool(server.client, "get_test_plan_xml", { planId });
+  assert.match(xmlAfter, /<HTTPSamplerProxy[^>]*enabled="true"/);
+});
+
+test("move_element and reorder_children", async () => {
+  const { nodeId: extraSamplerId } = await callTool(server.client, "add_http_sampler", {
+    planId,
+    parentId: threadGroupId,
+    name: "Extra Sampler",
+    method: "GET",
+    protocol: "https",
+    domain: "example.org",
+    path: "/extra",
+  });
+
+  await callTool(server.client, "move_element", {
+    planId,
+    nodeId: extraSamplerId,
+    newParentId: rootId,
+    index: 0,
+  });
+  let tree = await callTool(server.client, "get_test_plan", { planId });
+  assert.equal(tree.root.children[0].id, extraSamplerId);
+  assert.ok(!findNode(tree.root, threadGroupId).children.some((c: any) => c.id === extraSamplerId));
+
+  const currentOrder = tree.root.children.map((c: any) => c.id);
+  const reversed = [...currentOrder].reverse();
+  await callTool(server.client, "reorder_children", { planId, parentId: rootId, orderedChildIds: reversed });
+  tree = await callTool(server.client, "get_test_plan", { planId });
+  assert.deepEqual(
+    tree.root.children.map((c: any) => c.id),
+    reversed,
+  );
+});
+
+test("move_element rejects moving a node into its own subtree", async () => {
+  const message = await expectToolError(server.client, "move_element", {
+    planId,
+    nodeId: threadGroupId,
+    newParentId: samplerId,
+  });
+  assert.match(message, /own subtree/);
+});
+
+test("remove_element removes a node and its subtree", async () => {
+  const { nodeId: toRemoveId } = await callTool(server.client, "add_constant_timer", {
+    planId,
+    parentId: threadGroupId,
+    delayMs: 10,
+  });
+  await callTool(server.client, "remove_element", { planId, nodeId: toRemoveId });
+  const tree = await callTool(server.client, "get_test_plan", { planId });
+  assert.equal(findNode(tree.root, toRemoveId), undefined);
+});
+
+test("remove_element rejects removing the root TestPlan node", async () => {
+  const message = await expectToolError(server.client, "remove_element", { planId, nodeId: rootId });
+  assert.match(message, /Cannot remove the root/);
+});
 
 test("validation: add_csv_data_set rejects a relative path", async () => {
   const message = await expectToolError(server.client, "add_csv_data_set", {

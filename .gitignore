@@ -2,3 +2,4 @@ node_modules/
 dist/
 jmeter-workspace/
 *.log
+.DS_Store

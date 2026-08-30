@@ -1,8 +1,20 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { addChild, createNode, findNode } from "../jmx/tree.js";
+import {
+  addChild,
+  createNode,
+  findNode,
+  moveNode,
+  removeNode,
+  renameNode,
+  reorderChildren,
+  updateNodeProps,
+} from "../jmx/tree.js";
+import { parseJmx } from "../jmx/parser.js";
+import { propSchemas } from "../jmx/propSchemas.js";
+import { serializePlan } from "../jmx/serializer.js";
 import type { TestNode } from "../jmx/types.js";
 import { listPlans, newPlanId, readPlan, writePlan } from "../workspace.js";
 import { jsonResult } from "./shared.js";
@@ -1090,6 +1102,182 @@ export function registerPlanTools(server: McpServer): void {
       addChild(plan.root, parentId, node);
       writePlan(plan);
       return jsonResult({ nodeId: node.id });
+    },
+  );
+
+  server.registerTool(
+    "remove_element",
+    {
+      description: "Remove an element (and its subtree) from a test plan. The root TestPlan node cannot be removed.",
+      inputSchema: {
+        planId: z.string(),
+        nodeId: z.string(),
+      },
+    },
+    ({ planId, nodeId }) => {
+      const plan = readPlan(planId);
+      const removed = removeNode(plan.root, nodeId);
+      writePlan(plan);
+      return jsonResult({ removed: { id: removed.id, type: removed.type, name: removed.name } });
+    },
+  );
+
+  server.registerTool(
+    "update_element",
+    {
+      description:
+        "Update an element's props with a shallow merge (or full replace). A prop value of null in props " +
+        "removes that key. When the node's type is one of the modeled types, the resulting props are validated " +
+        "against that type's schema (check the type first via get_test_plan).",
+      inputSchema: {
+        planId: z.string(),
+        nodeId: z.string(),
+        props: z.record(z.string(), z.unknown()).describe("Patch to apply to the node's props"),
+        mode: z.enum(["merge", "replace"]).default("merge"),
+      },
+    },
+    ({ planId, nodeId, props, mode }) => {
+      const plan = readPlan(planId);
+      const node = requireNode(plan.root, nodeId);
+      const schema = propSchemas[node.type];
+      if (schema) {
+        const forValidation = mode === "replace" ? props : { ...node.props, ...props };
+        const toValidate = Object.fromEntries(
+          Object.entries(forValidation).filter(([, v]) => v !== null && v !== undefined),
+        );
+        const result = schema.partial().safeParse(toValidate);
+        if (!result.success) {
+          throw new Error(`Invalid props for ${node.type}: ${result.error.message}`);
+        }
+      }
+      updateNodeProps(plan.root, nodeId, props, mode);
+      writePlan(plan);
+      return jsonResult({ nodeId: node.id, props: node.props });
+    },
+  );
+
+  server.registerTool(
+    "rename_element",
+    {
+      description: "Rename an element (its testname in the generated .jmx).",
+      inputSchema: {
+        planId: z.string(),
+        nodeId: z.string(),
+        name: z.string(),
+      },
+    },
+    ({ planId, nodeId, name }) => {
+      const plan = readPlan(planId);
+      const node = renameNode(plan.root, nodeId, name);
+      writePlan(plan);
+      return jsonResult({ nodeId: node.id, name: node.name });
+    },
+  );
+
+  server.registerTool(
+    "move_element",
+    {
+      description:
+        "Move an element (and its subtree) to a new parent, optionally at a specific index among the new " +
+        "parent's children (default: appended last). Rejects moving a node into its own subtree.",
+      inputSchema: {
+        planId: z.string(),
+        nodeId: z.string(),
+        newParentId: z.string(),
+        index: z.number().int().nonnegative().optional(),
+      },
+    },
+    ({ planId, nodeId, newParentId, index }) => {
+      const plan = readPlan(planId);
+      const node = moveNode(plan.root, nodeId, newParentId, index);
+      writePlan(plan);
+      return jsonResult({ nodeId: node.id, newParentId });
+    },
+  );
+
+  server.registerTool(
+    "reorder_children",
+    {
+      description:
+        "Reorder a node's direct children. orderedChildIds must be an exact permutation of that node's " +
+        "current children ids.",
+      inputSchema: {
+        planId: z.string(),
+        parentId: z.string(),
+        orderedChildIds: z.array(z.string()),
+      },
+    },
+    ({ planId, parentId, orderedChildIds }) => {
+      const plan = readPlan(planId);
+      reorderChildren(plan.root, parentId, orderedChildIds);
+      writePlan(plan);
+      return jsonResult({ parentId, orderedChildIds });
+    },
+  );
+
+  server.registerTool(
+    "set_element_enabled",
+    {
+      description: "Enable or disable an element without removing it. A disabled element is skipped by JMeter at run time.",
+      inputSchema: {
+        planId: z.string(),
+        nodeId: z.string(),
+        enabled: z.boolean(),
+      },
+    },
+    ({ planId, nodeId, enabled }) => {
+      const plan = readPlan(planId);
+      const node = requireNode(plan.root, nodeId);
+      node.enabled = enabled;
+      writePlan(plan);
+      return jsonResult({ nodeId: node.id, enabled: node.enabled !== false });
+    },
+  );
+
+  server.registerTool(
+    "get_test_plan_xml",
+    {
+      description: "Serialize a test plan to its JMeter .jmx XML, without running JMeter.",
+      inputSchema: {
+        planId: z.string(),
+      },
+    },
+    ({ planId }) => {
+      const plan = readPlan(planId);
+      return jsonResult({ xml: serializePlan(plan.root) });
+    },
+  );
+
+  server.registerTool(
+    "import_test_plan",
+    {
+      description:
+        "Import an externally authored .jmx file (e.g. exported from the JMeter GUI) as a new test plan. " +
+        "Element types this server doesn't model are kept as opaque UnknownElement nodes (their original XML " +
+        "is preserved and re-emitted as-is) instead of being dropped - check unknownElementCount/unknownElementTypes " +
+        "in the response to see what wasn't fully understood.",
+      inputSchema: {
+        filePath: z.string().describe("Absolute path to the .jmx file to import"),
+        name: z.string().optional().describe("Plan name to use; defaults to the imported TestPlan element's name"),
+      },
+    },
+    ({ filePath, name }) => {
+      if (!isAbsolute(filePath)) {
+        throw new Error(`filePath must be an absolute path, got "${filePath}".`);
+      }
+      if (!existsSync(filePath)) {
+        throw new Error(`File not found: ${filePath}`);
+      }
+      const xml = readFileSync(filePath, "utf-8");
+      const { root, unknownCount, unknownTypes } = parseJmx(xml);
+      const planId = newPlanId();
+      writePlan({ planId, name: name ?? root.name, createdAt: new Date().toISOString(), root });
+      return jsonResult({
+        planId,
+        rootNodeId: root.id,
+        unknownElementCount: unknownCount,
+        unknownElementTypes: unknownTypes,
+      });
     },
   );
 }

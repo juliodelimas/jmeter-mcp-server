@@ -21,10 +21,10 @@ It can — a `.jmx` is just XML, and any capable model has seen plenty of JMeter
 
 That's not hypothetical — it happened building this project. An early version of the If Controller generated a property called `useExpression` set to `true`, which reads like "yes, evaluate my condition." The real JMeter source does the opposite: `useExpression=true` means *don't* evaluate it as an expression — just check if the string is literally `"true"`. Every non-trivial condition silently, permanently failed. No error, no warning — the child sampler just never ran. It only surfaced by actually executing the generated plan against real JMeter and noticing a sample count of zero.
 
-That's the whole case for this server in one story: an LLM regenerating XML from memory re-risks that exact mistake on every single request. This server encodes the correct shape **once**, in a serializer checked against real JMeter source and bundled examples, exercised by [97 automated tests](#testing) including real JMeter runs — and exposes it as typed tools instead. Concretely:
+That's the whole case for this server in one story: an LLM regenerating XML from memory re-risks that exact mistake on every single request. This server encodes the correct shape **once**, in a serializer (and a matching parser for the reverse direction) checked against real JMeter source and bundled examples, exercised by [166 automated tests](#testing) including real JMeter runs — and exposes it as typed tools instead. Concretely:
 
 - **Correctness through one tested code path**, not regenerated-from-memory XML every time.
-- **Cheap incremental edits.** Plans are a small JSON tree with stable node ids — adding an assertion is one tool call with a `parentId`, not rewriting a whole `.jmx` file.
+- **Cheap incremental edits.** Plans are a small JSON tree with stable node ids — adding, removing, renaming, moving, or disabling an element is one tool call by `id`, not rewriting a whole `.jmx` file. An existing `.jmx` (hand-written or exported from the GUI) can be imported and edited the same way.
 - **Aggregated results, not raw samples.** `get_execution_report` returns computed stats (error %, avg/median/p90/p95/p99, throughput) — not thousands of sample rows to average by hand.
 - **Real async execution.** `execute_test_plan` returns immediately with an `executionId`; long-running load tests never block anything.
 
@@ -42,7 +42,7 @@ Claude: [create_test_plan, add_thread_group, add_http_sampler, add_duration_asse
         Ran 300 requests over 30s, 0 failures. p95 latency: 214ms, avg: 187ms, throughput: 10.1 req/s.
 ```
 
-Every step above is a real typed MCP tool call — see [Tools](#tools) for the full set (30+ elements: samplers, controllers, timers, extractors, assertions, listeners) and [Example workflow](#example-workflow) for the raw call sequence.
+Every step above is a real typed MCP tool call — see [Tools](#tools) for the full set (34 element types across samplers, controllers, timers, extractors, assertions, and listeners, plus editing, inspection, and `.jmx` import/export tools) and [Example workflow](#example-workflow) for the raw call sequence.
 
 ## Quick start
 
@@ -56,7 +56,7 @@ That's it — no cloning, no build. Adjust `JMETER_HOME` to your JMeter install 
 
 ## How a test plan is represented
 
-Each plan is a JSON tree (`{id, type, props, children[]}`), not XML text. Authoring tools append a child under a given `parentId`; the tree is only serialized to a real `.jmx` file at execution time. This is what makes incremental edits cheap and keeps all the fiddly XML schema knowledge in one place (`src/jmx/serializer.ts`) instead of spread across every tool.
+Each plan is a JSON tree (`{id, type, props, children[]}`), not XML text. Authoring tools append a child under a given `parentId`, editing tools (`remove_element`, `update_element`, `move_element`, etc.) mutate that same tree in place, and the tree is only serialized to a real `.jmx` file on demand (`get_test_plan_xml`) or at execution time. `import_test_plan` runs the reverse direction, parsing an existing `.jmx` back into this same tree shape. This is what makes incremental edits cheap and keeps all the fiddly XML schema knowledge in two places (`src/jmx/serializer.ts` for tree → XML, `src/jmx/parser.ts` for XML → tree, sharing prop shapes from `src/jmx/propTypes.ts`) instead of spread across every tool.
 
 ## Tools
 
@@ -151,12 +151,25 @@ already know where to look:
 | `add_view_results_tree_listener` | View Results Tree listener (full request/response capture for debugging) |
 | `add_backend_listener` | Backend Listener (streams live metrics to InfluxDB/Graphite/etc.) |
 
+**Editing** (mutate an already-built plan):
+
+| Tool | Purpose |
+|---|---|
+| `remove_element` | Remove an element (and its subtree); rejects removing the root `TestPlan` node |
+| `update_element` | Shallow-merge (or replace) a node's props; a prop value of `null` deletes that key. Validated against the node's type when known |
+| `rename_element` | Rename an element's `testname` |
+| `move_element` | Move an element (and its subtree) to a new parent, optionally at a specific index; rejects moving a node into its own subtree |
+| `reorder_children` | Reorder a node's direct children (must pass an exact permutation of the current children) |
+| `set_element_enabled` | Enable/disable an element without removing it |
+
 **Inspection:**
 
 | Tool | Purpose |
 |---|---|
 | `list_test_plans` | List every plan in the workspace |
 | `get_test_plan` | Full element tree of a plan, including every node's `id` |
+| `get_test_plan_xml` | Serialize a plan to its JMeter `.jmx` XML, without running JMeter |
+| `import_test_plan` | Import an externally authored `.jmx` (e.g. exported from the JMeter GUI) as a new plan. Element types this server doesn't model are kept as opaque `UnknownElement` nodes instead of being dropped |
 
 **Execution & reporting** (async — a run happens in the background):
 
@@ -182,10 +195,11 @@ get_execution_report            (executionId) → aggregated latency/error stats
 
 ## Testing
 
-97 automated tests, no framework beyond Node's built-in test runner:
+166 automated tests, no framework beyond Node's built-in test runner:
 
 ```bash
-npm test               # 86 tests: XML-shape unit tests + every tool called over the real MCP
+npm test               # 155 tests: tree-mutation and XML-shape unit tests, XML -> tree parsing,
+                        # serialize -> parse round-trips, and every tool called over the real MCP
                         # protocol (stdio, the same way Claude Code/Desktop talk to it) - no
                         # JMeter install needed, fully hermetic
 npm run test:integration  # 11 tests: real JMeter runs - the If Controller story above, While
@@ -294,13 +308,27 @@ block above rather than relying on it already being "set on your machine".
     meta.json                        # execution status, pid, timestamps, exit code
 ```
 
+## Editing and importing plans
+
+Beyond the `add_*` authoring tools, a plan can be mutated after the fact
+(`remove_element`, `update_element`, `rename_element`, `move_element`,
+`reorder_children`, `set_element_enabled`) and an externally authored `.jmx`
+(e.g. exported from the JMeter GUI) can be brought in with `import_test_plan`.
+`import_test_plan` understands the most common element types (thread groups,
+HTTP samplers, assertions, extractors, controllers, config elements, the
+three report listeners, etc.); anything it doesn't recognize is kept as an
+opaque `UnknownElement` node whose original XML is preserved and re-emitted
+as-is by `get_test_plan_xml`/`execute_test_plan`, instead of being dropped -
+`import_test_plan`'s response reports `unknownElementCount`/
+`unknownElementTypes` so you know what wasn't fully understood. Coverage can
+be extended incrementally in `src/jmx/parser.ts`.
+
 ## v1 scope
 
-Not yet supported (candidates for a future release): editing/removing
-existing elements, importing an externally authored `.jmx`, generating the
-HTML dashboard report (`-e -o`), parent-type validation on `add_*` tools
-(nothing stops attaching an element under a semantically wrong parent),
-distributed execution.
+Not yet supported (candidates for a future release): generating the HTML
+dashboard report (`-e -o`), parent-type validation on `add_*`/`move_element`/
+`import_test_plan` (nothing stops attaching an element under a semantically
+wrong parent), distributed execution.
 
 Note on `add_csv_data_set`: the `filename` must be an absolute path.
 `execute_test_plan` runs JMeter from a fresh per-execution directory, so a

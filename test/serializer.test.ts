@@ -412,6 +412,19 @@ test("BackendListener", () => {
   assert.match(xml, /influxdbUrl/);
 });
 
+test("enabled:false renders enabled=\"false\" on the element tag", () => {
+  const node = createNode("ConstantTimer", "Timer", { delayMs: 250 });
+  node.enabled = false;
+  const xml = xmlOf(node);
+  assert.match(xml, /<ConstantTimer[^>]*enabled="false"/);
+});
+
+test("enabled defaults to true when absent", () => {
+  const node = createNode("ConstantTimer", "Timer", { delayMs: 250 });
+  const xml = xmlOf(node);
+  assert.match(xml, /<ConstantTimer[^>]*enabled="true"/);
+});
+
 test("nested children serialize inside a matching hashTree", () => {
   const root = createNode("TestPlan", "Parent/Child");
   const tg = createNode("ThreadGroup", "Users", { numThreads: 1, rampTimeSeconds: 1, loops: 1 });

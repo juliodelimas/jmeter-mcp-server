@@ -1,4 +1,51 @@
 import type { TestNode } from "./types.js";
+import type {
+  ArgumentsProps,
+  AssertionMatchType,
+  AssertionTestField,
+  BackendListenerProps,
+  ConstantThroughputTimerProps,
+  ConstantTimerProps,
+  CookieManagerProps,
+  CsvDataSetProps,
+  DurationAssertionProps,
+  FtpRequestProps,
+  HeaderManagerProps,
+  HttpRequestDefaultsProps,
+  HttpSamplerProps,
+  IfControllerProps,
+  InterleaveControllerProps,
+  JdbcConnectionConfigProps,
+  JdbcRequestProps,
+  JsonAssertionProps,
+  JsonExtractorProps,
+  Jsr223ProcessorProps,
+  Jsr223SamplerProps,
+  LoopControllerProps,
+  RegexExtractorProps,
+  ResponseAssertionProps,
+  SizeAssertionOperator,
+  SizeAssertionProps,
+  SizeAssertionTestField,
+  TcpSamplerProps,
+  ThreadGroupProps,
+  ThroughputCalcMode,
+  TransactionControllerProps,
+  UniformRandomTimerProps,
+  UnknownElementProps,
+  UserParametersProps,
+  ViewResultsTreeProps,
+  WhileControllerProps,
+  XPathExtractorProps,
+} from "./propTypes.js";
+
+export type {
+  AssertionMatchType,
+  AssertionTestField,
+  SizeAssertionOperator,
+  SizeAssertionTestField,
+  ThroughputCalcMode,
+};
 
 export interface SerializeOptions {
   /** Absolute path to force as the Aggregate Report listener's output file. */
@@ -28,7 +75,7 @@ const doubleProp = (name: string, value: number) =>
   `<doubleProp>\n<name>${esc(name)}</name>\n<value>${value}</value>\n<savedValue>0.0</savedValue>\n</doubleProp>`;
 
 function renderTestPlan(node: TestNode): string {
-  return `<TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="${esc(node.name)}" enabled="true">
+  return `<TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("TestPlan.comments", "")}
 ${boolProp("TestPlan.functional_mode", false)}
 ${boolProp("TestPlan.tearDown_on_shutdown", true)}
@@ -40,18 +87,11 @@ ${stringProp("TestPlan.user_define_classpath", "")}
 </TestPlan>`;
 }
 
-interface ThreadGroupProps {
-  numThreads: number;
-  rampTimeSeconds: number;
-  loops?: number;
-  durationSeconds?: number;
-}
-
 function renderThreadGroupVariant(node: TestNode, tag: string, guiclass: string): string {
   const p = node.props as unknown as ThreadGroupProps;
   const scheduler = p.durationSeconds !== undefined;
   const loops = p.loops ?? (scheduler ? 1 : 1);
-  return `<${tag} guiclass="${guiclass}" testclass="${tag}" testname="${esc(node.name)}" enabled="true">
+  return `<${tag} guiclass="${guiclass}" testclass="${tag}" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("ThreadGroup.on_sample_error", "continue")}
 <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
 ${boolProp("LoopController.continue_forever", false)}
@@ -64,15 +104,6 @@ ${stringProp("ThreadGroup.duration", scheduler ? p.durationSeconds : "")}
 ${stringProp("ThreadGroup.delay", "")}
 ${boolProp("ThreadGroup.same_user_on_next_iteration", true)}
 </${tag}>`;
-}
-
-interface HttpSamplerProps {
-  method: string;
-  protocol?: string;
-  domain?: string;
-  port?: number;
-  path: string;
-  bodyJson?: string;
 }
 
 function renderHttpArguments(bodyJson?: string): string {
@@ -94,7 +125,7 @@ ${stringProp("Argument.metadata", "=")}
 
 function renderHttpSampler(node: TestNode): string {
   const p = node.props as unknown as HttpSamplerProps;
-  return `<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="${esc(node.name)}" enabled="true">
+  return `<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${renderHttpArguments(p.bodyJson)}
 ${stringProp("HTTPSampler.domain", p.domain ?? "")}
 ${stringProp("HTTPSampler.port", p.port ?? "")}
@@ -109,10 +140,6 @@ ${boolProp("HTTPSampler.postBodyRaw", Boolean(p.bodyJson))}
 </HTTPSamplerProxy>`;
 }
 
-interface HeaderManagerProps {
-  headers: Array<{ name: string; value: string }>;
-}
-
 function renderHeaderManager(node: TestNode): string {
   const p = node.props as unknown as HeaderManagerProps;
   const headerXml = p.headers
@@ -123,22 +150,16 @@ ${stringProp("Header.value", h.value)}
 </elementProp>`,
     )
     .join("\n");
-  return `<HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="${esc(node.name)}" enabled="true">
+  return `<HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 <collectionProp name="HeaderManager.headers">
 ${headerXml}
 </collectionProp>
 </HeaderManager>`;
 }
 
-interface JsonExtractorProps {
-  referenceName: string;
-  jsonPathExpr: string;
-  defaultValue: string;
-}
-
 function renderJsonExtractor(node: TestNode): string {
   const p = node.props as unknown as JsonExtractorProps;
-  return `<JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="${esc(node.name)}" enabled="true">
+  return `<JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("JSONPostProcessor.referenceNames", p.referenceName)}
 ${stringProp("JSONPostProcessor.jsonPathExprs", p.jsonPathExpr)}
 ${stringProp("JSONPostProcessor.match_numbers", "0")}
@@ -146,27 +167,13 @@ ${stringProp("JSONPostProcessor.defaultValues", p.defaultValue)}
 </JSONPostProcessor>`;
 }
 
-export type AssertionTestField =
-  | "response_data"
-  | "response_code"
-  | "response_headers"
-  | "response_message";
-export type AssertionMatchType = "contains" | "matches" | "equals" | "substring";
-
-const MATCH_TYPE_BIT: Record<AssertionMatchType, number> = {
+export const MATCH_TYPE_BIT: Record<AssertionMatchType, number> = {
   matches: 1,
   contains: 2,
   equals: 8,
   substring: 16,
 };
-const NOT_BIT = 4;
-
-interface ResponseAssertionProps {
-  testField: AssertionTestField;
-  matchType: AssertionMatchType;
-  patterns: string[];
-  not?: boolean;
-}
+export const NOT_BIT = 4;
 
 function renderResponseAssertion(node: TestNode): string {
   const p = node.props as unknown as ResponseAssertionProps;
@@ -174,7 +181,7 @@ function renderResponseAssertion(node: TestNode): string {
   const patternsXml = p.patterns
     .map((pattern, i) => stringProp(String(i + 1), pattern))
     .join("\n");
-  return `<ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="${esc(node.name)}" enabled="true">
+  return `<ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 <collectionProp name="Asserion.test_strings">
 ${patternsXml}
 </collectionProp>
@@ -185,18 +192,9 @@ ${intProp("Assertion.test_type", testType)}
 </ResponseAssertion>`;
 }
 
-interface CsvDataSetProps {
-  filename: string;
-  variableNames?: string;
-  delimiter: string;
-  ignoreFirstLine: boolean;
-  recycle: boolean;
-  stopThread: boolean;
-}
-
 function renderCsvDataSet(node: TestNode): string {
   const p = node.props as unknown as CsvDataSetProps;
-  return `<CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="${esc(node.name)}" enabled="true">
+  return `<CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("filename", p.filename)}
 ${stringProp("fileEncoding", "UTF-8")}
 ${stringProp("variableNames", p.variableNames ?? "")}
@@ -207,10 +205,6 @@ ${boolProp("recycle", p.recycle)}
 ${boolProp("stopThread", p.stopThread)}
 ${stringProp("shareMode", "shareMode.all")}
 </CSVDataSet>`;
-}
-
-interface ArgumentsProps {
-  variables: Array<{ name: string; value: string }>;
 }
 
 function renderArguments(node: TestNode): string {
@@ -224,35 +218,23 @@ ${stringProp("Argument.metadata", "=")}
 </elementProp>`,
     )
     .join("\n");
-  return `<Arguments guiclass="ArgumentsPanel" testclass="Arguments" testname="${esc(node.name)}" enabled="true">
+  return `<Arguments guiclass="ArgumentsPanel" testclass="Arguments" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 <collectionProp name="Arguments.arguments">
 ${argsXml}
 </collectionProp>
 </Arguments>`;
 }
 
-interface ConstantTimerProps {
-  delayMs: number;
-}
-
 function renderConstantTimer(node: TestNode): string {
   const p = node.props as unknown as ConstantTimerProps;
-  return `<ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="${esc(node.name)}" enabled="true">
+  return `<ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("ConstantTimer.delay", p.delayMs)}
 </ConstantTimer>`;
 }
 
-interface RegexExtractorProps {
-  referenceName: string;
-  regex: string;
-  template: string;
-  matchNumber: number;
-  defaultValue: string;
-}
-
 function renderRegexExtractor(node: TestNode): string {
   const p = node.props as unknown as RegexExtractorProps;
-  return `<RegexExtractor guiclass="RegexExtractorGui" testclass="RegexExtractor" testname="${esc(node.name)}" enabled="true">
+  return `<RegexExtractor guiclass="RegexExtractorGui" testclass="RegexExtractor" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("RegexExtractor.useHeaders", "false")}
 ${stringProp("RegexExtractor.refname", p.referenceName)}
 ${stringProp("RegexExtractor.regex", p.regex)}
@@ -262,61 +244,35 @@ ${stringProp("RegexExtractor.match_number", p.matchNumber)}
 </RegexExtractor>`;
 }
 
-interface TransactionControllerProps {
-  includeTimers: boolean;
-}
-
 function renderTransactionController(node: TestNode): string {
   const p = node.props as unknown as TransactionControllerProps;
-  return `<TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="${esc(node.name)}" enabled="true">
+  return `<TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${boolProp("TransactionController.includeTimers", p.includeTimers)}
 ${boolProp("TransactionController.parent", false)}
 </TransactionController>`;
 }
 
-interface LoopControllerProps {
-  loops: number;
-}
-
 function renderLoopController(node: TestNode): string {
   const p = node.props as unknown as LoopControllerProps;
   const continueForever = p.loops === -1;
-  return `<LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="${esc(node.name)}" enabled="true">
+  return `<LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${boolProp("LoopController.continue_forever", continueForever)}
 ${intProp("LoopController.loops", p.loops)}
 </LoopController>`;
 }
 
-interface IfControllerProps {
-  condition: string;
-  evaluateAll: boolean;
-}
-
 function renderIfController(node: TestNode): string {
   const p = node.props as unknown as IfControllerProps;
-  return `<IfController guiclass="IfControllerPanel" testclass="IfController" testname="${esc(node.name)}" enabled="true">
+  return `<IfController guiclass="IfControllerPanel" testclass="IfController" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("IfController.condition", p.condition)}
 ${boolProp("IfController.evaluateAll", p.evaluateAll)}
 ${boolProp("IfController.useExpression", false)}
 </IfController>`;
 }
 
-interface JdbcConnectionConfigProps {
-  dataSource: string;
-  dbUrl: string;
-  driver: string;
-  username?: string;
-  password?: string;
-  poolMax: number;
-  connectionAge: number;
-  timeout: number;
-  trimInterval: number;
-  checkQuery?: string;
-}
-
 function renderJdbcConnectionConfiguration(node: TestNode): string {
   const p = node.props as unknown as JdbcConnectionConfigProps;
-  return `<JDBCDataSource guiclass="TestBeanGUI" testclass="JDBCDataSource" testname="${esc(node.name)}" enabled="true">
+  return `<JDBCDataSource guiclass="TestBeanGUI" testclass="JDBCDataSource" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${boolProp("autocommit", true)}
 ${stringProp("checkQuery", p.checkQuery ?? "")}
 ${stringProp("connectionAge", p.connectionAge)}
@@ -333,19 +289,9 @@ ${stringProp("username", p.username ?? "")}
 </JDBCDataSource>`;
 }
 
-interface JdbcRequestProps {
-  dataSource: string;
-  query: string;
-  queryType: string;
-  variableNames?: string;
-  resultVariable?: string;
-  queryArguments?: string;
-  queryArgumentsTypes?: string;
-}
-
 function renderJdbcRequest(node: TestNode): string {
   const p = node.props as unknown as JdbcRequestProps;
-  return `<JDBCSampler guiclass="TestBeanGUI" testclass="JDBCSampler" testname="${esc(node.name)}" enabled="true">
+  return `<JDBCSampler guiclass="TestBeanGUI" testclass="JDBCSampler" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("dataSource", p.dataSource)}
 ${stringProp("query", p.query)}
 ${stringProp("queryArguments", p.queryArguments ?? "")}
@@ -356,15 +302,9 @@ ${stringProp("variableNames", p.variableNames ?? "")}
 </JDBCSampler>`;
 }
 
-interface Jsr223SamplerProps {
-  scriptLanguage: string;
-  script: string;
-  parameters?: string;
-}
-
 function renderJsr223Sampler(node: TestNode): string {
   const p = node.props as unknown as Jsr223SamplerProps;
-  return `<JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="${esc(node.name)}" enabled="true">
+  return `<JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("cacheKey", "true")}
 ${stringProp("filename", "")}
 ${stringProp("parameters", p.parameters ?? "")}
@@ -373,22 +313,9 @@ ${stringProp("scriptLanguage", p.scriptLanguage)}
 </JSR223Sampler>`;
 }
 
-interface FtpRequestProps {
-  server: string;
-  port?: number;
-  filename: string;
-  localFilename?: string;
-  inputData?: string;
-  binaryMode: boolean;
-  saveResponse: boolean;
-  upload: boolean;
-  username: string;
-  password: string;
-}
-
 function renderFtpRequest(node: TestNode): string {
   const p = node.props as unknown as FtpRequestProps;
-  return `<FTPSampler guiclass="FtpTestSamplerGui" testclass="FTPSampler" testname="${esc(node.name)}" enabled="true">
+  return `<FTPSampler guiclass="FtpTestSamplerGui" testclass="FTPSampler" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("FTPSampler.server", p.server)}
 ${stringProp("FTPSampler.port", p.port ?? "")}
 ${stringProp("FTPSampler.filename", p.filename)}
@@ -402,21 +329,9 @@ ${stringProp("ConfigTestElement.password", p.password)}
 </FTPSampler>`;
 }
 
-interface TcpSamplerProps {
-  server: string;
-  port: number;
-  request: string;
-  classname: string;
-  reUseConnection: boolean;
-  closeConnection: boolean;
-  noDelay: boolean;
-  ctimeout?: number;
-  timeout?: number;
-}
-
 function renderTcpSampler(node: TestNode): string {
   const p = node.props as unknown as TcpSamplerProps;
-  return `<TCPSampler guiclass="TCPSamplerGui" testclass="TCPSampler" testname="${esc(node.name)}" enabled="true">
+  return `<TCPSampler guiclass="TCPSamplerGui" testclass="TCPSampler" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("TCPSampler.server", p.server)}
 ${stringProp("TCPSampler.port", p.port)}
 ${stringProp("TCPSampler.classname", p.classname)}
@@ -432,18 +347,9 @@ ${stringProp("TCPSampler.filename", "")}
 </TCPSampler>`;
 }
 
-interface HttpRequestDefaultsProps {
-  protocol?: string;
-  domain?: string;
-  port?: number;
-  path?: string;
-  connectTimeoutMs?: number;
-  responseTimeoutMs?: number;
-}
-
 function renderHttpRequestDefaults(node: TestNode): string {
   const p = node.props as unknown as HttpRequestDefaultsProps;
-  return `<ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="${esc(node.name)}" enabled="true">
+  return `<ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
 <collectionProp name="Arguments.arguments"/>
 </elementProp>
@@ -458,14 +364,9 @@ ${stringProp("HTTPSampler.concurrentPool", "4")}
 </ConfigTestElement>`;
 }
 
-interface CookieManagerProps {
-  clearEachIteration: boolean;
-  policy: string;
-}
-
 function renderCookieManager(node: TestNode): string {
   const p = node.props as unknown as CookieManagerProps;
-  return `<CookieManager guiclass="CookiePanel" testclass="CookieManager" testname="${esc(node.name)}" enabled="true">
+  return `<CookieManager guiclass="CookiePanel" testclass="CookieManager" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 <collectionProp name="CookieManager.cookies"/>
 ${boolProp("CookieManager.clearEachIteration", p.clearEachIteration)}
 ${stringProp("CookieManager.policy", p.policy)}
@@ -473,45 +374,29 @@ ${stringProp("CookieManager.implementation", "org.apache.jmeter.protocol.http.co
 </CookieManager>`;
 }
 
-interface WhileControllerProps {
-  condition: string;
-}
-
 function renderWhileController(node: TestNode): string {
   const p = node.props as unknown as WhileControllerProps;
-  return `<WhileController guiclass="WhileControllerGui" testclass="WhileController" testname="${esc(node.name)}" enabled="true">
+  return `<WhileController guiclass="WhileControllerGui" testclass="WhileController" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("WhileController.condition", p.condition)}
 </WhileController>`;
 }
 
 function renderRandomController(node: TestNode): string {
-  return `<RandomController guiclass="RandomControlGui" testclass="RandomController" testname="${esc(node.name)}" enabled="true">
+  return `<RandomController guiclass="RandomControlGui" testclass="RandomController" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${intProp("InterleaveControl.style", 1)}
 </RandomController>`;
 }
 
-interface InterleaveControllerProps {
-  ignoreSubControllerBlocks: boolean;
-}
-
 function renderInterleaveController(node: TestNode): string {
   const p = node.props as unknown as InterleaveControllerProps;
-  return `<InterleaveControl guiclass="InterleaveControlGui" testclass="InterleaveControl" testname="${esc(node.name)}" enabled="true">
+  return `<InterleaveControl guiclass="InterleaveControlGui" testclass="InterleaveControl" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${intProp("InterleaveControl.style", p.ignoreSubControllerBlocks ? 1 : 0)}
 </InterleaveControl>`;
 }
 
-interface XPathExtractorProps {
-  referenceName: string;
-  xpathQuery: string;
-  defaultValue: string;
-  matchNumber: number;
-  tolerant: boolean;
-}
-
 function renderXPathExtractor(node: TestNode): string {
   const p = node.props as unknown as XPathExtractorProps;
-  return `<XPathExtractor guiclass="XPathExtractorGui" testclass="XPathExtractor" testname="${esc(node.name)}" enabled="true">
+  return `<XPathExtractor guiclass="XPathExtractorGui" testclass="XPathExtractor" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("XPathExtractor.default", p.defaultValue)}
 ${stringProp("XPathExtractor.refname", p.referenceName)}
 ${stringProp("XPathExtractor.xpathQuery", p.xpathQuery)}
@@ -528,27 +413,15 @@ ${intProp("XPathExtractor.matchNumber", p.matchNumber)}
 </XPathExtractor>`;
 }
 
-interface Jsr223ProcessorProps {
-  scriptLanguage: string;
-  script: string;
-  parameters?: string;
-}
-
 function renderJsr223Processor(node: TestNode, tag: string): string {
   const p = node.props as unknown as Jsr223ProcessorProps;
-  return `<${tag} guiclass="TestBeanGUI" testclass="${tag}" testname="${esc(node.name)}" enabled="true">
+  return `<${tag} guiclass="TestBeanGUI" testclass="${tag}" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("scriptLanguage", p.scriptLanguage)}
 ${stringProp("parameters", p.parameters ?? "")}
 ${stringProp("filename", "")}
 ${stringProp("cacheKey", "true")}
 ${stringProp("script", p.script)}
 </${tag}>`;
-}
-
-interface UserParametersProps {
-  variableNames: string[];
-  valueSets: string[][];
-  perIteration: boolean;
 }
 
 function renderUserParameters(node: TestNode): string {
@@ -560,7 +433,7 @@ function renderUserParameters(node: TestNode): string {
       return `<collectionProp name="${j + 1}">\n${valuesXml}\n</collectionProp>`;
     })
     .join("\n");
-  return `<UserParameters guiclass="UserParametersGui" testclass="UserParameters" testname="${esc(node.name)}" enabled="true">
+  return `<UserParameters guiclass="UserParametersGui" testclass="UserParameters" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 <collectionProp name="UserParameters.names">
 ${namesXml}
 </collectionProp>
@@ -571,18 +444,9 @@ ${boolProp("UserParameters.per_iteration", p.perIteration)}
 </UserParameters>`;
 }
 
-interface JsonAssertionProps {
-  jsonPath: string;
-  expectedValue?: string;
-  jsonValidation: boolean;
-  expectNull: boolean;
-  invert: boolean;
-  isRegex: boolean;
-}
-
 function renderJsonAssertion(node: TestNode): string {
   const p = node.props as unknown as JsonAssertionProps;
-  return `<JSONPathAssertion guiclass="JSONPathAssertionGui" testclass="JSONPathAssertion" testname="${esc(node.name)}" enabled="true">
+  return `<JSONPathAssertion guiclass="JSONPathAssertionGui" testclass="JSONPathAssertion" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("JSON_PATH", p.jsonPath)}
 ${stringProp("EXPECTED_VALUE", p.expectedValue ?? "")}
 ${boolProp("JSONVALIDATION", p.jsonValidation)}
@@ -592,30 +456,12 @@ ${boolProp("ISREGEX", p.isRegex)}
 </JSONPathAssertion>`;
 }
 
-interface DurationAssertionProps {
-  maxDurationMs: number;
-}
-
 function renderDurationAssertion(node: TestNode): string {
   const p = node.props as unknown as DurationAssertionProps;
-  return `<DurationAssertion guiclass="DurationAssertionGui" testclass="DurationAssertion" testname="${esc(node.name)}" enabled="true">
+  return `<DurationAssertion guiclass="DurationAssertionGui" testclass="DurationAssertion" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("DurationAssertion.duration", p.maxDurationMs)}
 </DurationAssertion>`;
 }
-
-export type SizeAssertionOperator =
-  | "equal"
-  | "notequal"
-  | "greaterthan"
-  | "lessthan"
-  | "greaterthanequal"
-  | "lessthanequal";
-export type SizeAssertionTestField =
-  | "response_network_size"
-  | "response_headers"
-  | "response_data"
-  | "response_code"
-  | "response_message";
 
 const SIZE_OPERATOR_CODE: Record<SizeAssertionOperator, number> = {
   equal: 1,
@@ -626,40 +472,22 @@ const SIZE_OPERATOR_CODE: Record<SizeAssertionOperator, number> = {
   lessthanequal: 6,
 };
 
-interface SizeAssertionProps {
-  size: number;
-  operator: SizeAssertionOperator;
-  testField: SizeAssertionTestField;
-}
-
 function renderSizeAssertion(node: TestNode): string {
   const p = node.props as unknown as SizeAssertionProps;
-  return `<SizeAssertion guiclass="SizeAssertionGui" testclass="SizeAssertion" testname="${esc(node.name)}" enabled="true">
+  return `<SizeAssertion guiclass="SizeAssertionGui" testclass="SizeAssertion" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("Assertion.test_field", `SizeAssertion.${p.testField}`)}
 ${stringProp("SizeAssertion.size", p.size)}
 ${intProp("SizeAssertion.operator", SIZE_OPERATOR_CODE[p.operator])}
 </SizeAssertion>`;
 }
 
-interface UniformRandomTimerProps {
-  delayMs: number;
-  rangeMs: number;
-}
-
 function renderUniformRandomTimer(node: TestNode): string {
   const p = node.props as unknown as UniformRandomTimerProps;
-  return `<UniformRandomTimer guiclass="UniformRandomTimerGui" testclass="UniformRandomTimer" testname="${esc(node.name)}" enabled="true">
+  return `<UniformRandomTimer guiclass="UniformRandomTimerGui" testclass="UniformRandomTimer" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${stringProp("ConstantTimer.delay", p.delayMs)}
 ${stringProp("RandomTimer.range", p.rangeMs)}
 </UniformRandomTimer>`;
 }
-
-export type ThroughputCalcMode =
-  | "this_thread_only"
-  | "all_active_threads"
-  | "all_active_threads_in_current_thread_group"
-  | "all_active_threads_shared"
-  | "all_active_threads_in_current_thread_group_shared";
 
 const CALC_MODE_CODE: Record<ThroughputCalcMode, number> = {
   this_thread_only: 0,
@@ -669,29 +497,19 @@ const CALC_MODE_CODE: Record<ThroughputCalcMode, number> = {
   all_active_threads_in_current_thread_group_shared: 4,
 };
 
-interface ConstantThroughputTimerProps {
-  targetSamplesPerMinute: number;
-  calcMode: ThroughputCalcMode;
-}
-
 function renderConstantThroughputTimer(node: TestNode): string {
   const p = node.props as unknown as ConstantThroughputTimerProps;
-  return `<ConstantThroughputTimer guiclass="TestBeanGUI" testclass="ConstantThroughputTimer" testname="${esc(node.name)}" enabled="true">
+  return `<ConstantThroughputTimer guiclass="TestBeanGUI" testclass="ConstantThroughputTimer" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${intProp("calcMode", CALC_MODE_CODE[p.calcMode])}
 ${doubleProp("throughput", p.targetSamplesPerMinute)}
 </ConstantThroughputTimer>`;
-}
-
-interface ViewResultsTreeProps {
-  filename?: string;
-  captureFullData: boolean;
 }
 
 function renderViewResultsTree(node: TestNode, forcedFilename?: string): string {
   const p = node.props as unknown as ViewResultsTreeProps;
   const filename = forcedFilename ?? p.filename ?? "";
   const full = p.captureFullData;
-  return `<ResultCollector guiclass="ViewResultsFullVisualizer" testclass="ResultCollector" testname="${esc(node.name)}" enabled="true">
+  return `<ResultCollector guiclass="ViewResultsFullVisualizer" testclass="ResultCollector" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 ${boolProp("ResultCollector.error_logging", false)}
 <objProp>
 <name>saveConfig</name>
@@ -730,11 +548,6 @@ ${stringProp("filename", filename)}
 </ResultCollector>`;
 }
 
-interface BackendListenerProps {
-  classname: string;
-  args: Array<{ name: string; value: string }>;
-}
-
 function renderBackendListener(node: TestNode): string {
   const p = node.props as unknown as BackendListenerProps;
   const argsXml = p.args
@@ -746,7 +559,7 @@ ${stringProp("Argument.metadata", "=")}
 </elementProp>`,
     )
     .join("\n");
-  return `<BackendListener guiclass="BackendListenerGui" testclass="BackendListener" testname="${esc(node.name)}" enabled="true">
+  return `<BackendListener guiclass="BackendListenerGui" testclass="BackendListener" testname="${esc(node.name)}" enabled="${node.enabled !== false}">
 <elementProp name="arguments" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" enabled="true">
 <collectionProp name="Arguments.arguments">
 ${argsXml}
@@ -763,7 +576,7 @@ function renderResultCollector(
   forcedFilename?: string,
 ): string {
   const filename = forcedFilename ?? (node.props.filename as string | undefined) ?? "";
-  return `<ResultCollector guiclass="${guiclass}" testclass="ResultCollector" testname="${esc(testname)}" enabled="true">
+  return `<ResultCollector guiclass="${guiclass}" testclass="ResultCollector" testname="${esc(testname)}" enabled="${node.enabled !== false}">
 ${boolProp("ResultCollector.error_logging", false)}
 <objProp>
 <name>saveConfig</name>
@@ -799,6 +612,19 @@ ${boolProp("ResultCollector.error_logging", false)}
 </objProp>
 ${stringProp("filename", filename)}
 </ResultCollector>`;
+}
+
+function renderUnknownElement(node: TestNode): string {
+  const p = node.props as unknown as UnknownElementProps;
+  // rawXml is captured without testname/enabled (see parser.ts's rebuildXml) so that
+  // rename_element/set_element_enabled - which only touch TestNode.name/enabled - still
+  // take effect here instead of being silently overridden by whatever was in the original XML.
+  const closeIdx = p.rawXml.indexOf(">");
+  if (closeIdx === -1) return p.rawXml;
+  const selfClosing = p.rawXml[closeIdx - 1] === "/";
+  const insertAt = selfClosing ? closeIdx - 1 : closeIdx;
+  const injected = ` testname="${esc(node.name)}" enabled="${node.enabled !== false}"`;
+  return p.rawXml.slice(0, insertAt) + injected + p.rawXml.slice(insertAt);
 }
 
 function renderElement(node: TestNode, opts: SerializeOptions): string {
@@ -884,6 +710,8 @@ function renderElement(node: TestNode, opts: SerializeOptions): string {
       return renderViewResultsTree(node, opts.viewResultsTreeFilename);
     case "BackendListener":
       return renderBackendListener(node);
+    case "UnknownElement":
+      return renderUnknownElement(node);
     default: {
       const exhaustive: never = node.type;
       throw new Error(`Unknown node type: ${exhaustive}`);
