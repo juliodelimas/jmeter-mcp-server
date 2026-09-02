@@ -60,6 +60,24 @@ test("ThreadGroup (fixed loops)", () => {
   assert.deepEqual(tg.props, { numThreads: 10, rampTimeSeconds: 20, loops: 5 });
 });
 
+test("ThreadGroup (fixed loops, LoopController.loops as stringProp - real JMeter GUI export format)", () => {
+  const xml = `<ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Users" enabled="true">
+<stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+<elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+<boolProp name="LoopController.continue_forever">false</boolProp>
+<stringProp name="LoopController.loops">3</stringProp>
+</elementProp>
+<stringProp name="ThreadGroup.num_threads">50</stringProp>
+<stringProp name="ThreadGroup.ramp_time">20</stringProp>
+<boolProp name="ThreadGroup.scheduler">false</boolProp>
+<stringProp name="ThreadGroup.duration"></stringProp>
+</ThreadGroup>`;
+  const { root } = parseJmx(wrap(xml));
+  const tg = root.children[0];
+  assert.equal(tg.type, "ThreadGroup");
+  assert.deepEqual(tg.props, { numThreads: 50, rampTimeSeconds: 20, loops: 3 });
+});
+
 test("ThreadGroup (scheduler duration)", () => {
   const xml = `<ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Users" enabled="true">
 <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
@@ -244,6 +262,15 @@ test("LoopController", () => {
   const xml = `<LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="Loop" enabled="true">
 <boolProp name="LoopController.continue_forever">false</boolProp>
 <intProp name="LoopController.loops">5</intProp>
+</LoopController>`;
+  const { root } = parseJmx(wrap(xml));
+  assert.deepEqual(root.children[0].props, { loops: 5 });
+});
+
+test("LoopController (loops as stringProp - real JMeter GUI export format)", () => {
+  const xml = `<LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="Loop" enabled="true">
+<boolProp name="LoopController.continue_forever">false</boolProp>
+<stringProp name="LoopController.loops">5</stringProp>
 </LoopController>`;
   const { root } = parseJmx(wrap(xml));
   assert.deepEqual(root.children[0].props, { loops: 5 });

@@ -184,6 +184,27 @@ function intPropVal(children: XmlNode[], name: string, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+/**
+ * Like intPropVal, but also accepts the value as a stringProp. JMeter's own GUI always
+ * saves LoopController.loops as a stringProp (the field accepts JMeter variables like
+ * ${LOOPS}), even though this server's serializer writes it as an intProp - so a .jmx
+ * exported from the real JMeter GUI must be read via this, not intPropVal alone, or the
+ * loop count silently falls back to its default.
+ */
+function intOrStringPropVal(children: XmlNode[], name: string, fallback = 0): number {
+  const intNode = findByTagAndName(children, "intProp", name);
+  if (intNode) {
+    const n = Number(textOf(intNode));
+    return Number.isFinite(n) ? n : fallback;
+  }
+  const strNode = findByTagAndName(children, "stringProp", name);
+  if (strNode) {
+    const n = Number(textOf(strNode));
+    return Number.isFinite(n) ? n : fallback;
+  }
+  return fallback;
+}
+
 function elementPropChildren(children: XmlNode[], name: string): XmlNode[] {
   const node = findByTagAndName(children, "elementProp", name);
   return node ? childrenOf(node) : [];
@@ -213,7 +234,7 @@ function parseThreadGroupProps(children: XmlNode[]): ThreadGroupProps {
     return { numThreads, rampTimeSeconds, durationSeconds };
   }
   const mainController = elementPropChildren(children, "ThreadGroup.main_controller");
-  const loops = intPropVal(mainController, "LoopController.loops", 1);
+  const loops = intOrStringPropVal(mainController, "LoopController.loops", 1);
   return { numThreads, rampTimeSeconds, loops };
 }
 
@@ -294,7 +315,7 @@ function parseTransactionControllerProps(children: XmlNode[]): TransactionContro
 }
 
 function parseLoopControllerProps(children: XmlNode[]): LoopControllerProps {
-  return { loops: intPropVal(children, "LoopController.loops", 1) };
+  return { loops: intOrStringPropVal(children, "LoopController.loops", 1) };
 }
 
 function parseIfControllerProps(children: XmlNode[]): IfControllerProps {
