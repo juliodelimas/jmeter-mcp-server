@@ -3,3 +3,4 @@ dist/
 jmeter-workspace/
 *.log
 .DS_Store
+.plans/
