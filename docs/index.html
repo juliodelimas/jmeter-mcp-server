@@ -1,0 +1,1417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>jmeter-mcp-server — MCP server for Apache JMeter</title>
+<meta name="description" content="A stdio MCP server that gives an LLM real, typed control over Apache JMeter: build test plans, run load tests, read back reports.">
+<style>
+  :root{
+    --bg:#0a0c10;
+    --bg-alt:#0e1117;
+    --surface:#12151d;
+    --surface-2:#171b25;
+    --border:#232838;
+    --border-soft:#1b1f2b;
+    --text:#e7eaf1;
+    --text-dim:#a6adbe;
+    --text-faint:#6b7385;
+    --accent:#ffb454;
+    --accent-dim:#c98a3c;
+    --teal:#5ccfe6;
+    --green:#7fd88f;
+    --red:#ef7178;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --maxw: 980px;
+    --radius: 10px;
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    line-height:1.6;
+    font-size:16px;
+    -webkit-font-smoothing:antialiased;
+  }
+  body{
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(255,180,84,0.06), transparent 40%),
+      radial-gradient(circle at 85% 15%, rgba(92,207,230,0.05), transparent 45%);
+  }
+
+  ::selection{ background:rgba(255,180,84,0.25); color:var(--text); }
+
+  a{ color:var(--teal); text-decoration:none; }
+  a:hover{ text-decoration:underline; }
+
+  code, pre, .mono{ font-family:var(--mono); }
+
+  code{
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    border-radius:5px;
+    padding:0.1em 0.4em;
+    font-size:0.88em;
+    color:var(--accent);
+    white-space:nowrap;
+  }
+
+  pre{
+    background:var(--bg-alt);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:18px 20px;
+    overflow-x:auto;
+    font-size:0.86rem;
+    line-height:1.55;
+    color:#c7cede;
+  }
+  pre code{
+    background:none;
+    border:none;
+    padding:0;
+    white-space:pre;
+    color:inherit;
+  }
+
+  .wrap{
+    max-width:var(--maxw);
+    margin:0 auto;
+    padding:0 24px;
+  }
+
+  /* ---------- lang toggle ---------- */
+  [data-lang="pt"]{ display:none !important; }
+  html.pt [data-lang="en"]{ display:none !important; }
+  html.pt [data-lang="pt"]{ display:revert !important; }
+
+  .langswitch{
+    position:fixed;
+    top:16px;
+    right:16px;
+    z-index:100;
+    display:flex;
+    gap:2px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:999px;
+    padding:3px;
+    box-shadow:0 4px 18px rgba(0,0,0,0.35);
+  }
+  .langswitch button{
+    font-family:var(--mono);
+    font-size:0.72rem;
+    letter-spacing:0.03em;
+    border:none;
+    background:transparent;
+    color:var(--text-faint);
+    padding:6px 12px;
+    border-radius:999px;
+    cursor:pointer;
+    transition:background 0.15s, color 0.15s;
+  }
+  .langswitch button.active{
+    background:var(--accent);
+    color:#1a1204;
+    font-weight:600;
+  }
+
+  /* ---------- nav ---------- */
+  header.site{
+    position:sticky;
+    top:0;
+    z-index:50;
+    backdrop-filter:blur(10px);
+    background:rgba(10,12,16,0.82);
+    border-bottom:1px solid var(--border-soft);
+  }
+  nav{
+    max-width:var(--maxw);
+    margin:0 auto;
+    padding:14px 24px;
+    display:flex;
+    align-items:center;
+    gap:18px;
+  }
+  nav .brand{
+    font-family:var(--mono);
+    font-weight:600;
+    font-size:0.95rem;
+    color:var(--text);
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-right:auto;
+  }
+  nav .brand .dot{ color:var(--accent); }
+  nav .links{
+    display:flex;
+    gap:20px;
+    flex-wrap:wrap;
+  }
+  nav .links a{
+    font-size:0.86rem;
+    color:var(--text-dim);
+  }
+  nav .links a:hover{ color:var(--text); text-decoration:none; }
+
+  @media (max-width: 720px){
+    nav .links{ display:none; }
+  }
+
+  /* ---------- hero ---------- */
+  .hero{
+    padding:76px 0 56px;
+    border-bottom:1px solid var(--border-soft);
+  }
+  .kicker{
+    font-family:var(--mono);
+    font-size:0.78rem;
+    color:var(--accent);
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    margin-bottom:18px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .kicker::before{
+    content:"";
+    width:8px; height:8px;
+    border-radius:50%;
+    background:var(--green);
+    box-shadow:0 0 8px var(--green);
+  }
+  h1{
+    font-size:clamp(2rem, 4.5vw, 3.1rem);
+    line-height:1.12;
+    margin:0 0 20px;
+    letter-spacing:-0.02em;
+  }
+  h1 .accent{ color:var(--accent); }
+  .lede{
+    font-size:1.13rem;
+    color:var(--text-dim);
+    max-width:640px;
+    margin:0 0 34px;
+  }
+  .cta-row{
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+    margin-bottom:40px;
+  }
+  .btn{
+    font-family:var(--mono);
+    font-size:0.86rem;
+    padding:11px 18px;
+    border-radius:8px;
+    border:1px solid var(--border);
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    transition:border-color 0.15s, transform 0.1s;
+  }
+  .btn:hover{ text-decoration:none; border-color:var(--accent-dim); transform:translateY(-1px); }
+  .btn.primary{
+    background:var(--accent);
+    color:#1a1204;
+    border-color:var(--accent);
+    font-weight:600;
+  }
+  .btn.primary:hover{ border-color:var(--accent); }
+  .btn.ghost{ color:var(--text); }
+
+  .badges{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:36px; }
+  .badges img{ height:20px; display:block; }
+
+  .termbox{
+    background:var(--bg-alt);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    overflow:hidden;
+  }
+  .termbox .bar{
+    display:flex; gap:6px;
+    padding:10px 14px;
+    border-bottom:1px solid var(--border);
+    background:var(--surface);
+  }
+  .termbox .bar span{
+    width:10px; height:10px; border-radius:50%;
+    background:#3a3f4d;
+  }
+  .termbox .bar span:nth-child(1){ background:#ef7178; }
+  .termbox .bar span:nth-child(2){ background:#e5b567; }
+  .termbox .bar span:nth-child(3){ background:#7fd88f; }
+  .termbox pre{ border:none; border-radius:0; margin:0; }
+  .termbox .you{ color:var(--teal); }
+  .termbox .ai{ color:var(--accent); }
+
+  /* ---------- sections ---------- */
+  section{
+    padding:64px 0;
+    border-bottom:1px solid var(--border-soft);
+  }
+  section:last-of-type{ border-bottom:none; }
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:0.76rem;
+    color:var(--text-faint);
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    margin-bottom:10px;
+  }
+  h2{
+    font-size:clamp(1.5rem, 3vw, 2rem);
+    margin:0 0 18px;
+    letter-spacing:-0.01em;
+  }
+  h3{
+    font-size:1.12rem;
+    margin:28px 0 10px;
+    color:var(--text);
+  }
+  p{ color:var(--text-dim); margin:0 0 16px; }
+  .lead-p{ font-size:1.05rem; color:var(--text-dim); max-width:720px; }
+
+  .two-col{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:28px;
+  }
+  @media (max-width: 760px){ .two-col{ grid-template-columns:1fr; } }
+
+  .card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:22px 24px;
+  }
+  .card h3{ margin-top:0; }
+
+  .callout{
+    border-left:3px solid var(--accent);
+    background:var(--surface);
+    border-radius:0 var(--radius) var(--radius) 0;
+    padding:16px 20px;
+    margin:22px 0;
+  }
+  .callout p:last-child{ margin-bottom:0; }
+  .callout.bad{ border-left-color:var(--red); }
+  .callout.good{ border-left-color:var(--green); }
+
+  /* diagram */
+  .diagram{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:0;
+    flex-wrap:wrap;
+    margin:26px 0;
+    font-family:var(--mono);
+    font-size:0.82rem;
+  }
+  .diagram .node{
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:12px 16px;
+    text-align:center;
+    min-width:120px;
+  }
+  .diagram .node.accent{ border-color:var(--accent-dim); color:var(--accent); }
+  .diagram .arrow{
+    color:var(--text-faint);
+    padding:0 14px;
+    font-size:1.1rem;
+  }
+  .diagram .stack{ display:flex; flex-direction:column; gap:10px; align-items:center; }
+  .diagram .label{ color:var(--text-faint); font-size:0.72rem; margin-top:4px; }
+
+  .compare{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:20px;
+    margin:24px 0;
+  }
+  @media (max-width: 700px){ .compare{ grid-template-columns:1fr; } }
+  .compare .col{
+    border-radius:var(--radius);
+    border:1px solid var(--border);
+    padding:20px;
+  }
+  .compare .col.no{ background:rgba(239,113,120,0.05); border-color:rgba(239,113,120,0.25); }
+  .compare .col.yes{ background:rgba(127,216,143,0.05); border-color:rgba(127,216,143,0.25); }
+  .compare h4{ margin:0 0 10px; font-size:0.95rem; font-family:var(--mono); }
+  .compare .col.no h4{ color:var(--red); }
+  .compare .col.yes h4{ color:var(--green); }
+  .compare ul{ margin:0; padding-left:18px; color:var(--text-dim); font-size:0.92rem; }
+  .compare li{ margin-bottom:6px; }
+
+  /* tools */
+  .tool-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(260px,1fr));
+    gap:18px;
+    margin-top:22px;
+  }
+  .tool-group{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:18px 20px;
+  }
+  .tool-group .cat{
+    font-family:var(--mono);
+    font-size:0.72rem;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--accent);
+    margin-bottom:12px;
+  }
+  .tool-group ul{ list-style:none; margin:0; padding:0; }
+  .tool-group li{
+    padding:6px 0;
+    border-bottom:1px solid var(--border-soft);
+    font-size:0.86rem;
+  }
+  .tool-group li:last-child{ border-bottom:none; }
+  .tool-group code{ white-space:normal; }
+  .tool-group .desc{ display:block; color:var(--text-faint); font-size:0.8rem; margin-top:2px; }
+
+  .tool-count{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    font-family:var(--mono);
+    font-size:0.86rem;
+    color:var(--text-dim);
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:999px;
+    padding:6px 14px;
+    margin-bottom:6px;
+  }
+  .tool-count b{ color:var(--accent); }
+
+  /* prompts */
+  .prompt-card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:0;
+    margin-bottom:22px;
+    overflow:hidden;
+  }
+  .prompt-card .ptitle{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:16px 22px;
+    border-bottom:1px solid var(--border);
+    background:var(--surface-2);
+  }
+  .prompt-card .ptitle .n{
+    font-family:var(--mono);
+    color:var(--accent);
+    font-size:0.82rem;
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:2px 8px;
+  }
+  .prompt-card .ptitle h4{ margin:0; font-size:1rem; font-weight:600; }
+  .prompt-card .body{ padding:20px 22px; }
+  .prompt-card .say{
+    font-family:var(--mono);
+    font-size:0.88rem;
+    color:var(--teal);
+    background:var(--bg-alt);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:14px 16px;
+    margin-bottom:14px;
+  }
+  .prompt-card .flow{
+    font-family:var(--mono);
+    font-size:0.78rem;
+    color:var(--text-faint);
+    margin-bottom:12px;
+    line-height:1.7;
+    word-break:break-word;
+  }
+  .prompt-card .flow b{ color:var(--accent-dim); font-weight:600; }
+  .prompt-card .note{ font-size:0.9rem; color:var(--text-dim); margin:0; }
+
+  /* roadmap table */
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:0.88rem;
+    margin-top:18px;
+  }
+  th, td{
+    text-align:left;
+    padding:12px 14px;
+    border-bottom:1px solid var(--border-soft);
+    vertical-align:top;
+  }
+  th{
+    font-family:var(--mono);
+    font-size:0.72rem;
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    color:var(--text-faint);
+    border-bottom:1px solid var(--border);
+  }
+  td{ color:var(--text-dim); }
+  td.tool-name code{ white-space:nowrap; }
+  .tablewrap{ overflow-x:auto; }
+
+  /* gaps */
+  .gap-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(220px,1fr));
+    gap:16px;
+    margin-top:18px;
+  }
+  .gap-item{
+    border:1px dashed var(--border);
+    border-radius:var(--radius);
+    padding:16px 18px;
+  }
+  .gap-item .t{ font-family:var(--mono); font-size:0.82rem; color:var(--text); margin-bottom:6px; display:block; }
+  .gap-item .d{ font-size:0.84rem; color:var(--text-faint); }
+
+  /* about */
+  .about-wrap{
+    display:flex;
+    gap:28px;
+    align-items:flex-start;
+    flex-wrap:wrap;
+  }
+  .about-avatar{
+    width:96px; height:96px;
+    border-radius:50%;
+    background:linear-gradient(135deg, var(--accent), var(--teal));
+    flex:0 0 auto;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:var(--mono);
+    font-size:1.8rem;
+    font-weight:700;
+    color:#141414;
+  }
+  .about-body{ flex:1 1 320px; min-width:260px; }
+  .about-links{ display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
+  .about-links a{
+    font-family:var(--mono);
+    font-size:0.82rem;
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:8px 14px;
+    color:var(--text-dim);
+  }
+  .about-links a:hover{ color:var(--accent); border-color:var(--accent-dim); text-decoration:none; }
+
+  footer{
+    padding:40px 0 60px;
+    text-align:center;
+  }
+  footer p{ font-size:0.84rem; color:var(--text-faint); }
+  footer a{ color:var(--text-dim); }
+
+  .backtop{
+    display:inline-block;
+    margin-top:10px;
+    font-family:var(--mono);
+    font-size:0.78rem;
+    color:var(--text-faint);
+  }
+</style>
+</head>
+<body>
+
+<div class="langswitch" role="group" aria-label="Language">
+  <button id="lang-en" class="active" onclick="setLang('en')">EN</button>
+  <button id="lang-pt" onclick="setLang('pt')">PT-BR</button>
+</div>
+
+<header class="site">
+  <nav>
+    <div class="brand"><span class="dot">▸</span> jmeter-mcp-server</div>
+    <div class="links">
+      <a href="#mcp"><span data-lang="en">MCP</span><span data-lang="pt">MCP</span></a>
+      <a href="#tools"><span data-lang="en">Tools</span><span data-lang="pt">Ferramentas</span></a>
+      <a href="#prompts"><span data-lang="en">Prompts</span><span data-lang="pt">Exemplos</span></a>
+      <a href="#roadmap"><span data-lang="en">Roadmap</span><span data-lang="pt">Roadmap</span></a>
+      <a href="#gaps"><span data-lang="en">Gaps</span><span data-lang="pt">Lacunas</span></a>
+      <a href="#about"><span data-lang="en">About</span><span data-lang="pt">Sobre</span></a>
+      <a href="https://github.com/juliodelimas/jmeter-mcp-server" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </nav>
+</header>
+
+<main>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap">
+      <div class="kicker">
+        <span data-lang="en">stdio &middot; typed tools &middot; MIT licensed</span>
+        <span data-lang="pt">stdio &middot; ferramentas tipadas &middot; licença MIT</span>
+      </div>
+
+      <h1 data-lang="en">Give your AI <span class="accent">real control</span> over JMeter.</h1>
+      <h1 data-lang="pt">Dê à sua IA <span class="accent">controle real</span> sobre o JMeter.</h1>
+
+      <p class="lede" data-lang="en">
+        An MCP server that lets Claude (or any MCP client) build Apache JMeter test plans, run real
+        load tests, and read back real results — through typed tool calls, never by hand-writing
+        <code>.jmx</code> XML from memory.
+      </p>
+      <p class="lede" data-lang="pt">
+        Um servidor MCP que permite ao Claude (ou a qualquer cliente MCP) construir planos de teste do
+        Apache JMeter, executar testes de carga de verdade e ler os resultados reais — por meio de
+        chamadas de ferramentas tipadas, nunca escrevendo XML <code>.jmx</code> de memória.
+      </p>
+
+      <div class="cta-row">
+        <a class="btn primary" href="https://github.com/juliodelimas/jmeter-mcp-server" target="_blank" rel="noopener">
+          <span data-lang="en">View on GitHub</span><span data-lang="pt">Ver no GitHub</span>
+        </a>
+        <a class="btn ghost" href="#tools">
+          <span data-lang="en">Browse the 52 tools</span><span data-lang="pt">Ver as 52 ferramentas</span>
+        </a>
+        <a class="btn ghost" href="#prompts">
+          <span data-lang="en">See example prompts</span><span data-lang="pt">Ver exemplos de prompt</span>
+        </a>
+      </div>
+
+      <div class="badges">
+        <a href="https://www.npmjs.com/package/jmeter-mcp-server" target="_blank" rel="noopener"><img src="https://img.shields.io/npm/v/jmeter-mcp-server.svg" alt="npm version"></a>
+        <a href="https://github.com/juliodelimas/jmeter-mcp-server/actions/workflows/ci.yml" target="_blank" rel="noopener"><img src="https://github.com/juliodelimas/jmeter-mcp-server/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+        <a href="LICENSE"><img src="https://img.shields.io/npm/l/jmeter-mcp-server.svg" alt="MIT license"></a>
+      </div>
+
+      <div class="termbox">
+        <div class="bar"><span></span><span></span><span></span></div>
+        <pre><code><span class="you" data-lang="en">you&gt;</span><span class="you" data-lang="pt">você&gt;</span> <span data-lang="en">Load test my API: 20 users hitting POST /orders for 2 minutes,
+    5% think time, fail anything over 800ms.</span><span data-lang="pt">Teste de carga na minha API: 20 usuários batendo em POST /orders por 2 minutos,
+    5% de think time, falhar tudo que passar de 800ms.</span>
+
+<span class="ai" data-lang="en">claude&gt; [create_test_plan, add_thread_group, add_http_sampler,
+        add_duration_assertion, add_aggregate_report_listener,
+        execute_test_plan, get_execution_status, get_execution_report]
+
+        Ran 2,400 requests over 2m, 3 failures (0.1%).
+        p95 latency: 612ms, avg: 340ms, throughput: 20.1 req/s.</span><span class="ai" data-lang="pt">claude&gt; [create_test_plan, add_thread_group, add_http_sampler,
+        add_duration_assertion, add_aggregate_report_listener,
+        execute_test_plan, get_execution_status, get_execution_report]
+
+        Executadas 2.400 requisições em 2min, 3 falhas (0,1%).
+        p95: 612ms, média: 340ms, throughput: 20,1 req/s.</span></code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHAT IS MCP -->
+  <section id="mcp">
+    <div class="wrap">
+      <div class="eyebrow" data-lang="en">Background</div>
+      <div class="eyebrow" data-lang="pt">Contexto</div>
+      <h2 data-lang="en">What is MCP, and why does that matter here?</h2>
+      <h2 data-lang="pt">O que é o MCP, e por que isso importa aqui?</h2>
+
+      <p class="lead-p" data-lang="en">
+        The <strong>Model Context Protocol</strong> (MCP) is an open standard for connecting an AI model
+        to external tools and data sources through a structured, typed interface — instead of the model
+        guessing at shell commands or generating raw text it hopes is correct. Think of it as a common
+        connector: any MCP <em>client</em> (Claude Code, Claude Desktop, and others) can talk to any MCP
+        <em>server</em>, and the server exposes a fixed menu of <strong>tools</strong> — each with a name,
+        a description, and a strict input/output schema. The model doesn't write JMeter internals; it
+        picks a tool, like <code>add_http_sampler</code>, and passes structured arguments. The server
+        validates them and does the actual work.
+      </p>
+      <p class="lead-p" data-lang="pt">
+        O <strong>Model Context Protocol</strong> (MCP) é um padrão aberto para conectar um modelo de IA
+        a ferramentas e fontes de dados externas por meio de uma interface estruturada e tipada — em vez
+        de o modelo "chutar" comandos de shell ou gerar texto cru na esperança de que esteja correto.
+        Pense nele como um conector universal: qualquer <em>cliente</em> MCP (Claude Code, Claude Desktop,
+        entre outros) consegue conversar com qualquer <em>servidor</em> MCP, e o servidor expõe um menu
+        fixo de <strong>ferramentas (tools)</strong> — cada uma com nome, descrição e um schema estrito de
+        entrada/saída. O modelo não escreve os detalhes internos do JMeter; ele escolhe uma ferramenta,
+        como <code>add_http_sampler</code>, e passa argumentos estruturados. O servidor valida tudo e faz
+        o trabalho de verdade.
+      </p>
+
+      <div class="diagram">
+        <div class="stack">
+          <div class="node accent" data-lang="en">MCP client<br><span class="label">Claude Code / Desktop</span></div>
+          <div class="node accent" data-lang="pt">Cliente MCP<br><span class="label">Claude Code / Desktop</span></div>
+        </div>
+        <div class="arrow">⇄</div>
+        <div class="stack">
+          <div class="node">jmeter-mcp-server<br><span class="label" data-lang="en">typed tools over stdio</span><span class="label" data-lang="pt">ferramentas tipadas via stdio</span></div>
+        </div>
+        <div class="arrow">⇄</div>
+        <div class="stack">
+          <div class="node">Apache JMeter<br><span class="label" data-lang="en">real local process</span><span class="label" data-lang="pt">processo local real</span></div>
+        </div>
+      </div>
+
+      <p data-lang="en">
+        This server is the middle box: it turns a conversation into real, valid <code>.jmx</code> test
+        plans and real JMeter runs, and turns JMeter's raw output back into something the model can reason
+        about — aggregated stats instead of thousands of sample rows.
+      </p>
+      <p data-lang="pt">
+        Este servidor é a caixa do meio: ele transforma uma conversa em planos de teste <code>.jmx</code>
+        reais e válidos e em execuções reais do JMeter, e transforma a saída bruta do JMeter em algo sobre
+        o qual o modelo consegue raciocinar — estatísticas agregadas em vez de milhares de linhas de amostra.
+      </p>
+    </div>
+  </section>
+
+  <!-- WHY MCP INSTEAD OF RAW XML -->
+  <section id="why-mcp">
+    <div class="wrap">
+      <div class="eyebrow" data-lang="en">Why a server, not free-form XML</div>
+      <div class="eyebrow" data-lang="pt">Por que um servidor, e não XML solto</div>
+      <h2 data-lang="en">Why not just ask the LLM to write the <code>.jmx</code> itself?</h2>
+      <h2 data-lang="pt">Por que não simplesmente pedir para a LLM escrever o <code>.jmx</code>?</h2>
+
+      <p class="lead-p" data-lang="en">
+        It can — a <code>.jmx</code> is just XML, and any capable model has seen plenty of JMeter test
+        plans. The problem is <em>how</em> it fails: JMeter's format is a <code>hashTree</code> with
+        dozens of fragile, easy-to-misremember details — exact <code>guiclass</code>/<code>testclass</code>
+        pairs, property names that don't match their GUI label, integer <em>bitmasks</em> for assertion
+        match types, strict parent/child pairing with sibling <code>&lt;hashTree&gt;</code> tags. None of
+        it is self-checking. A wrong value still produces valid, loadable XML that just quietly does the
+        wrong thing.
+      </p>
+      <p class="lead-p" data-lang="pt">
+        Consegue — um <code>.jmx</code> é só XML, e qualquer modelo competente já viu muitos planos de
+        teste do JMeter. O problema é <em>como</em> ele falha: o formato do JMeter é uma
+        <code>hashTree</code> cheia de detalhes frágeis e fáceis de lembrar errado — pares exatos de
+        <code>guiclass</code>/<code>testclass</code>, nomes de propriedade que não batem com o rótulo na
+        GUI, <em>bitmasks</em> inteiros para os tipos de assertion, pareamento rígido de pai/filho com
+        tags <code>&lt;hashTree&gt;</code> irmãs. Nada disso se auto-verifica. Um valor errado ainda
+        produz um XML válido e carregável — que simplesmente faz a coisa errada, em silêncio.
+      </p>
+
+      <div class="callout bad">
+        <p data-lang="en">
+          <strong>This isn't hypothetical — it happened building this project.</strong> An early version
+          of the If Controller generated a property called <code>useExpression</code> set to
+          <code>true</code>, which reads like "yes, evaluate my condition." The real JMeter source does
+          the <em>opposite</em>: <code>useExpression=true</code> means <em>don't</em> evaluate it as an
+          expression — just check if the string is literally <code>"true"</code>. Every non-trivial
+          condition silently, permanently failed. No error, no warning — the child sampler just never
+          ran. It only surfaced by actually executing the generated plan against real JMeter and noticing
+          a sample count of zero.
+        </p>
+        <p data-lang="pt">
+          <strong>Isso não é hipotético — aconteceu na construção deste projeto.</strong> Uma versão
+          inicial do If Controller gerava uma propriedade chamada <code>useExpression</code> como
+          <code>true</code>, o que parece dizer "sim, avalie minha condição". O código-fonte real do
+          JMeter faz o <em>oposto</em>: <code>useExpression=true</code> significa <em>não</em> avaliar
+          como expressão — apenas checar se a string é literalmente <code>"true"</code>. Toda condição
+          não trivial falhava silenciosa e permanentemente. Sem erro, sem aviso — o sampler filho
+          simplesmente nunca rodava. Só veio à tona executando de fato o plano gerado contra um JMeter
+          real e percebendo uma contagem de amostras igual a zero.
+        </p>
+      </div>
+
+      <p data-lang="en">
+        That's the whole case for this server in one story: an LLM regenerating XML from memory re-risks
+        that exact mistake on every single request. This server encodes the correct shape <strong>once</strong>,
+        in a serializer (and a matching parser for the reverse direction) checked against real JMeter
+        source and bundled examples, exercised by 166 automated tests including real JMeter runs — and
+        exposes it as typed tools instead.
+      </p>
+      <p data-lang="pt">
+        Esse é todo o argumento a favor deste servidor, resumido em uma história: uma LLM regerando XML
+        de memória arrisca repetir exatamente esse erro a cada requisição. Este servidor codifica o
+        formato correto <strong>uma única vez</strong>, em um serializador (e um parser correspondente
+        para o sentido inverso) verificado contra o código-fonte real do JMeter e exemplos reais, coberto
+        por 166 testes automatizados incluindo execuções reais do JMeter — e expõe isso como ferramentas
+        tipadas.
+      </p>
+
+      <div class="two-col">
+        <div class="card">
+          <h3 data-lang="en">✓ Correctness through one tested path</h3>
+          <h3 data-lang="pt">✓ Correção por um único caminho testado</h3>
+          <p data-lang="en">Not regenerated-from-memory XML on every single request.</p>
+          <p data-lang="pt">Em vez de XML regerado de memória a cada requisição.</p>
+        </div>
+        <div class="card">
+          <h3 data-lang="en">✓ Cheap incremental edits</h3>
+          <h3 data-lang="pt">✓ Edições incrementais baratas</h3>
+          <p data-lang="en">Plans are a small JSON tree with stable node ids — adding, removing, moving, or disabling an element is one tool call by <code>id</code>, not a full file rewrite.</p>
+          <p data-lang="pt">Planos são uma árvore JSON pequena com IDs de nó estáveis — adicionar, remover, mover ou desabilitar um elemento é uma chamada de ferramenta por <code>id</code>, não reescrever o arquivo inteiro.</p>
+        </div>
+        <div class="card">
+          <h3 data-lang="en">✓ Aggregated results, not raw samples</h3>
+          <h3 data-lang="pt">✓ Resultados agregados, não amostras cruas</h3>
+          <p data-lang="en"><code>get_execution_report</code> returns computed stats (error %, avg/median/p90/p95/p99, throughput) — not thousands of rows to average by hand.</p>
+          <p data-lang="pt"><code>get_execution_report</code> devolve estatísticas já calculadas (% de erro, média/mediana/p90/p95/p99, throughput) — não milhares de linhas para tirar média na mão.</p>
+        </div>
+        <div class="card">
+          <h3 data-lang="en">✓ Real async execution</h3>
+          <h3 data-lang="pt">✓ Execução assíncrona de verdade</h3>
+          <p data-lang="en"><code>execute_test_plan</code> returns immediately with an <code>executionId</code>; long-running load tests never block anything.</p>
+          <p data-lang="pt"><code>execute_test_plan</code> retorna imediatamente com um <code>executionId</code>; testes de carga longos nunca bloqueiam nada.</p>
+        </div>
+      </div>
+
+      <p data-lang="en">The generated <code>.jmx</code> is standard JMeter output — open it in the real GUI any time.</p>
+      <p data-lang="pt">O <code>.jmx</code> gerado é uma saída padrão do JMeter — pode abrir na GUI real quando quiser.</p>
+    </div>
+  </section>
+
+  <!-- WHY STDIO -->
+  <section id="why-stdio">
+    <div class="wrap">
+      <div class="eyebrow" data-lang="en">Architecture</div>
+      <div class="eyebrow" data-lang="pt">Arquitetura</div>
+      <h2 data-lang="en">Why <code>stdio</code>, and why that's the safer choice</h2>
+      <h2 data-lang="pt">Por que <code>stdio</code>, e por que isso é mais seguro</h2>
+
+      <p class="lead-p" data-lang="en">
+        MCP servers can talk to their client over different transports. This one deliberately uses
+        <strong>stdio</strong>: the server is a plain local process, spawned directly by your MCP client
+        (Claude Code, Claude Desktop), and the two talk by writing JSON-RPC messages to each other's
+        <code>stdin</code>/<code>stdout</code> pipes. Nothing listens on a network port. Nothing is
+        reachable from outside your machine.
+      </p>
+      <p class="lead-p" data-lang="pt">
+        Servidores MCP podem conversar com o cliente por diferentes transportes. Este usa
+        <strong>stdio</strong> de propósito: o servidor é um processo local comum, iniciado diretamente
+        pelo seu cliente MCP (Claude Code, Claude Desktop), e os dois trocam mensagens JSON-RPC escrevendo
+        nos pipes <code>stdin</code>/<code>stdout</code> um do outro. Nada fica escutando em uma porta de
+        rede. Nada é alcançável de fora da sua máquina.
+      </p>
+
+      <div class="compare">
+        <div class="col no">
+          <h4 data-lang="en">✗ A remote HTTP/SSE MCP server</h4>
+          <h4 data-lang="pt">✗ Um servidor MCP remoto via HTTP/SSE</h4>
+          <ul>
+            <li data-lang="en">Needs an exposed endpoint, TLS, and its own auth/token story</li>
+            <li data-lang="pt">Precisa de um endpoint exposto, TLS e sua própria história de autenticação/token</li>
+            <li data-lang="en">Reachable by anyone with the URL and credentials</li>
+            <li data-lang="pt">Alcançável por qualquer um com a URL e as credenciais</li>
+            <li data-lang="en">Your target URLs, test plans, and JMeter output travel to a third-party host</li>
+            <li data-lang="pt">Suas URLs alvo, planos de teste e saídas do JMeter trafegam até um host de terceiros</li>
+            <li data-lang="en">A compromised server is a compromised network service</li>
+            <li data-lang="pt">Um servidor comprometido é um serviço de rede comprometido</li>
+          </ul>
+        </div>
+        <div class="col yes">
+          <h4 data-lang="en">✓ This stdio server</h4>
+          <h4 data-lang="pt">✓ Este servidor stdio</h4>
+          <ul>
+            <li data-lang="en">Only runs when your own MCP client spawns it — no listening socket, ever</li>
+            <li data-lang="pt">Só roda quando o seu próprio cliente MCP o inicia — nenhum socket escutando, nunca</li>
+            <li data-lang="en">Not reachable over the network under any circumstance</li>
+            <li data-lang="pt">Não é alcançável pela rede em nenhuma circunstância</li>
+            <li data-lang="en">Inherits only your own OS-level user permissions — no separate auth layer to leak</li>
+            <li data-lang="pt">Herda apenas as suas próprias permissões de usuário do sistema operacional — nenhuma camada extra de auth para vazar</li>
+            <li data-lang="en">Test plans, target URLs, and results stay on your disk, in your workspace folder</li>
+            <li data-lang="pt">Planos de teste, URLs alvo e resultados ficam no seu disco, na sua pasta de workspace</li>
+            <li data-lang="en">Real JMeter runs against real systems stay under your direct, local control</li>
+            <li data-lang="pt">As execuções reais do JMeter contra sistemas reais ficam sob seu controle local e direto</li>
+          </ul>
+        </div>
+      </div>
+
+      <p data-lang="en">
+        For a tool that runs real load against real target systems and reads/writes local files
+        (<code>.jmx</code>, <code>.jtl</code>, CSV data files), minimizing the blast radius matters:
+        stdio means the smallest possible attack surface — a child process that can only be started
+        by something already running on your machine, with no network identity of its own.
+      </p>
+      <p data-lang="pt">
+        Para uma ferramenta que gera carga real contra sistemas alvo reais e lê/escreve arquivos locais
+        (<code>.jmx</code>, <code>.jtl</code>, arquivos CSV), minimizar o raio de impacto importa: stdio
+        significa a menor superfície de ataque possível — um processo filho que só pode ser iniciado por
+        algo que já está rodando na sua máquina, sem identidade de rede própria.
+      </p>
+    </div>
+  </section>
+
+  <!-- TOOLS -->
+  <section id="tools">
+    <div class="wrap">
+      <div class="eyebrow" data-lang="en">Reference</div>
+      <div class="eyebrow" data-lang="pt">Referência</div>
+      <h2 data-lang="en">All the tools</h2>
+      <h2 data-lang="pt">Todas as ferramentas</h2>
+
+      <div class="tool-count">
+        <span data-lang="en"><b>52</b> typed MCP tools</span>
+        <span data-lang="pt"><b>52</b> ferramentas MCP tipadas</span>
+      </div>
+      <p class="lead-p" data-lang="en">
+        Grouped the same way JMeter's own right-click <strong>Add</strong> menu groups elements — if you
+        already know the GUI, you already know where to look. Authoring tools return the new node's
+        <code>id</code>, used as the <code>parentId</code> for whatever gets attached under it next.
+      </p>
+      <p class="lead-p" data-lang="pt">
+        Agrupadas do mesmo jeito que o próprio menu de botão direito <strong>Add</strong> do JMeter agrupa
+        os elementos — se você já conhece a GUI, já sabe onde procurar. As ferramentas de criação
+        devolvem o <code>id</code> do novo nó, usado como <code>parentId</code> para o que for anexado
+        embaixo dele em seguida.
+      </p>
+
+      <div class="tool-grid">
+
+        <div class="tool-group">
+          <div class="cat" data-lang="en">Test Plan</div>
+          <div class="cat" data-lang="pt">Plano de teste</div>
+          <ul>
+            <li><code>create_test_plan</code><span class="desc" data-lang="en">Root TestPlan node — returns planId and root node id</span><span class="desc" data-lang="pt">Nó raiz TestPlan — retorna planId e o id do nó raiz</span></li>
+          </ul>
+        </div>
+
+        <div class="tool-group">
+          <div class="cat" data-lang="en">Threads (Users)</div>
+          <div class="cat" data-lang="pt">Threads (Usuários)</div>
+          <ul>
+            <li><code>add_thread_group</code><span class="desc" data-lang="en">Thread Group (virtual users)</span><span class="desc" data-lang="pt">Thread Group (usuários virtuais)</span></li>
+            <li><code>add_setup_thread_group</code><span class="desc" data-lang="en">setUp Thread Group — runs once before all Thread Groups</span><span class="desc" data-lang="pt">setUp Thread Group — roda uma vez antes de todos os Thread Groups</span></li>
+            <li><code>add_teardown_thread_group</code><span class="desc" data-lang="en">tearDown Thread Group — runs once after all Thread Groups</span><span class="desc" data-lang="pt">tearDown Thread Group — roda uma vez depois de todos os Thread Groups</span></li>
+          </ul>
+        </div>
+
+        <div class="tool-group">
+          <div class="cat" data-lang="en">Sampler</div>
+          <div class="cat" data-lang="pt">Sampler</div>
+          <ul>
+            <li><code>add_http_sampler</code><span class="desc" data-lang="en">HTTP Request sampler</span><span class="desc" data-lang="pt">Sampler de requisição HTTP</span></li>
+            <li><code>add_jdbc_request</code><span class="desc" data-lang="en">JDBC Request sampler</span><span class="desc" data-lang="pt">Sampler de requisição JDBC</span></li>
+            <li><code>add_jsr223_sampler</code><span class="desc" data-lang="en">JSR223 Sampler — Groovy/BeanShell/JS/JEXL script as the sample</span><span class="desc" data-lang="pt">JSR223 Sampler — script Groovy/BeanShell/JS/JEXL como amostra</span></li>
+            <li><code>add_ftp_request</code><span class="desc" data-lang="en">FTP Request sampler</span><span class="desc" data-lang="pt">Sampler de requisição FTP</span></li>
+            <li><code>add_tcp_sampler</code><span class="desc" data-lang="en">TCP Sampler</span><span class="desc" data-lang="pt">TCP Sampler</span></li>
+          </ul>
+        </div>
+
+        <div class="tool-group">
+          <div class="cat" data-lang="en">Logic Controller</div>
+          <div class="cat" data-lang="pt">Logic Controller</div>
+          <ul>
+            <li><code>add_transaction_controller</code><span class="desc" data-lang="en">Groups child samplers into one named transaction</span><span class="desc" data-lang="pt">Agrupa samplers filhos em uma transação nomeada</span></li>
+            <li><code>add_loop_controller</code><span class="desc" data-lang="en">Repeats child samplers</span><span class="desc" data-lang="pt">Repete os samplers filhos</span></li>
+            <li><code>add_if_controller</code><span class="desc" data-lang="en">Conditionally runs child samplers</span><span class="desc" data-lang="pt">Executa os filhos condicionalmente</span></li>
+            <li><code>add_while_controller</code><span class="desc" data-lang="en">Repeats children while a condition holds</span><span class="desc" data-lang="pt">Repete os filhos enquanto uma condição se mantiver</span></li>
+            <li><code>add_random_controller</code><span class="desc" data-lang="en">Runs one random child per pass</span><span class="desc" data-lang="pt">Roda um filho aleatório por passagem</span></li>
+            <li><code>add_interleave_controller</code><span class="desc" data-lang="en">Alternates through children</span><span class="desc" data-lang="pt">Alterna entre os filhos</span></li>
+          </ul>
+        </div>
+
+        <div class="tool-group">
+          <div class="cat" data-lang="en">Config Element</div>
+          <div class="cat" data-lang="pt">Config Element</div>
+          <ul>
+            <li><code>add_csv_data_set</code><span class="desc" data-lang="en">CSV Data Set Config — parameterization from a file</span><span class="desc" data-lang="pt">CSV Data Set Config — parametrização a partir de um arquivo</span></li>
+            <li><code>add_user_defined_variables</code><span class="desc" data-lang="en">User Defined Variables</span><span class="desc" data-lang="pt">User Defined Variables</span></li>
+            <li><code>add_jdbc_connection_configuration</code><span class="desc" data-lang="en">JDBC Connection Configuration — pooled datasource</span><span class="desc" data-lang="pt">JDBC Connection Configuration — datasource com pool</span></li>
+            <li><code>add_http_request_defaults</code><span class="desc" data-lang="en">HTTP Request Defaults</span><span class="desc" data-lang="pt">HTTP Request Defaults</span></li>
+            <li><code>add_cookie_manager</code><span class="desc" data-lang="en">HTTP Cookie Manager</span><span class="desc" data-lang="pt">HTTP Cookie Manager</span></li>
+            <li><code>add_header_manager</code><span class="desc" data-lang="en">HTTP Header Manager</span><span class="desc" data-lang="pt">HTTP Header Manager</span></li>
+          </ul>
+        </div>
+
+        <div class="tool-group">
+          <div class="cat" data-lang="en">Timer</div>
+          <div class="cat" data-lang="pt">Timer</div>
+          <ul>
+            <li><code>add_constant_timer</code><span class="desc" data-lang="en">Constant Timer — pacing / think-time</span><span class="desc" data-lang="pt">Constant Timer — ritmo / think-time</span></li>
+            <li><code>add_uniform_random_timer</code><span class="desc" data-lang="en">Uniform Random Timer — randomized pacing</span><span class="desc" data-lang="pt">Uniform Random Timer — ritmo aleatório</span></li>
+            <li><code>add_constant_throughput_timer</code><span class="desc" data-lang="en">Constant Throughput Timer — target rate pacing</span><span class="desc" data-lang="pt">Constant Throughput Timer — ritmo por taxa alvo</span></li>
+          </ul>
+        </div>
+
+        <div class="tool-group">
+          <div class="cat" data-lang="en">Pre Processors</div>
+          <div class="cat" data-lang="pt">Pre Processors</div>
+          <ul>
+            <li><code>add_jsr223_preprocessor</code><span class="desc" data-lang="en">JSR223 PreProcessor</span><span class="desc" data-lang="pt">JSR223 PreProcessor</span></li>
+            <li><code>add_user_parameters</code><span class="desc" data-lang="en">User Parameters — per-thread variable value sets</span><span class="desc" data-lang="pt">User Parameters — conjuntos de valores por thread</span></li>
+          </ul>
+        </div>
+
+        <div class="tool-group">
+          <div class="cat" data-lang="en">Post Processors</div>
+          <div class="cat" data-lang="pt">Post Processors</div>
+          <ul>
+            <li><code>add_json_extractor</code><span class="desc" data-lang="en">JSON Extractor post-processor</span><span class="desc" data-lang="pt">JSON Extractor</span></li>
+            <li><code>add_regex_extractor</code><span class="desc" data-lang="en">Regular Expression Extractor</span><span class="desc" data-lang="pt">Regular Expression Extractor</span></li>
+            <li><code>add_xpath_extractor</code><span class="desc" data-lang="en">XPath Extractor</span><span class="desc" data-lang="pt">XPath Extractor</span></li>
+            <li><code>add_jsr223_postprocessor</code><span class="desc" data-lang="en">JSR223 PostProcessor</span><span class="desc" data-lang="pt">JSR223 PostProcessor</span></li>
+          </ul>
+        </div>
+
+        <div class="tool-group">
+          <div class="cat" data-lang="en">Assertions</div>
+          <div class="cat" data-lang="pt">Assertions</div>
+          <ul>
+            <li><code>add_response_assertion</code><span class="desc" data-lang="en">Response Assertion</span><span class="desc" data-lang="pt">Response Assertion</span></li>
+            <li><code>add_json_assertion</code><span class="desc" data-lang="en">JSON Assertion — JSONPath validation</span><span class="desc" data-lang="pt">JSON Assertion — validação via JSONPath</span></li>
+            <li><code>add_duration_assertion</code><span class="desc" data-lang="en">Duration Assertion — response-time SLA</span><span class="desc" data-lang="pt">Duration Assertion — SLA de tempo de resposta</span></li>
+            <li><code>add_size_assertion</code><span class="desc" data-lang="en">Size Assertion — response byte-size check</span><span class="desc" data-lang="pt">Size Assertion — checagem de tamanho da resposta</span></li>
+          </ul>
+        </div>
+
+        <div class="tool-group">
+          <div class="cat" data-lang="en">Listener</div>
+          <div class="cat" data-lang="pt">Listener</div>
+          <ul>
+            <li><code>add_aggregate_report_listener</code><span class="desc" data-lang="en">Aggregate Report listener</span><span class="desc" data-lang="pt">Listener Aggregate Report</span></li>
+            <li><code>add_summary_report_listener</code><span class="desc" data-lang="en">Summary Report listener</span><span class="desc" data-lang="pt">Listener Summary Report</span></li>
+            <li><code>add_view_results_tree_listener</code><span class="desc" data-lang="en">View Results Tree — full request/response capture for debugging</span><span class="desc" data-lang="pt">View Results Tree — captura completa de request/response para debug</span></li>
+            <li><code>add_backend_listener</code><span class="desc" data-lang="en">Backend Listener — streams live metrics to InfluxDB/Graphite/etc.</span><span class="desc" data-lang="pt">Backend Listener — envia métricas em tempo real para InfluxDB/Graphite/etc.</span></li>
+          </ul>
+        </div>
+
+        <div class="tool-group">
+          <div class="cat" data-lang="en">Editing</div>
+          <div class="cat" data-lang="pt">Edição</div>
+          <ul>
+            <li><code>remove_element</code><span class="desc" data-lang="en">Remove an element and its subtree (rejects removing the root)</span><span class="desc" data-lang="pt">Remove um elemento e sua subárvore (rejeita remover a raiz)</span></li>
+            <li><code>update_element</code><span class="desc" data-lang="en">Shallow-merge or replace a node's props; validated against its type</span><span class="desc" data-lang="pt">Mescla ou substitui as props de um nó; validado contra seu tipo</span></li>
+            <li><code>rename_element</code><span class="desc" data-lang="en">Rename an element's testname</span><span class="desc" data-lang="pt">Renomeia o testname de um elemento</span></li>
+            <li><code>move_element</code><span class="desc" data-lang="en">Move an element and its subtree to a new parent</span><span class="desc" data-lang="pt">Move um elemento e sua subárvore para outro pai</span></li>
+            <li><code>reorder_children</code><span class="desc" data-lang="en">Reorder a node's direct children</span><span class="desc" data-lang="pt">Reordena os filhos diretos de um nó</span></li>
+            <li><code>set_element_enabled</code><span class="desc" data-lang="en">Enable/disable an element without removing it</span><span class="desc" data-lang="pt">Habilita/desabilita um elemento sem removê-lo</span></li>
+          </ul>
+        </div>
+
+        <div class="tool-group">
+          <div class="cat" data-lang="en">Inspection</div>
+          <div class="cat" data-lang="pt">Inspeção</div>
+          <ul>
+            <li><code>list_test_plans</code><span class="desc" data-lang="en">List every plan in the workspace</span><span class="desc" data-lang="pt">Lista todos os planos no workspace</span></li>
+            <li><code>get_test_plan</code><span class="desc" data-lang="en">Full element tree of a plan, including every node's id</span><span class="desc" data-lang="pt">Árvore completa de elementos de um plano, com o id de cada nó</span></li>
+            <li><code>get_test_plan_xml</code><span class="desc" data-lang="en">Serialize a plan to .jmx XML, without running JMeter</span><span class="desc" data-lang="pt">Serializa um plano para XML .jmx, sem rodar o JMeter</span></li>
+            <li><code>import_test_plan</code><span class="desc" data-lang="en">Import an externally authored .jmx (e.g. from the GUI)</span><span class="desc" data-lang="pt">Importa um .jmx criado externamente (ex.: pela GUI)</span></li>
+          </ul>
+        </div>
+
+        <div class="tool-group">
+          <div class="cat" data-lang="en">Execution &amp; Reporting</div>
+          <div class="cat" data-lang="pt">Execução &amp; Relatórios</div>
+          <ul>
+            <li><code>execute_test_plan</code><span class="desc" data-lang="en">Serialize and run JMeter in non-GUI mode; returns executionId immediately</span><span class="desc" data-lang="pt">Serializa e roda o JMeter em modo non-GUI; retorna executionId na hora</span></li>
+            <li><code>get_execution_status</code><span class="desc" data-lang="en">running / completed / failed, plus a tail of the JMeter log</span><span class="desc" data-lang="pt">running / completed / failed, mais um trecho do log do JMeter</span></li>
+            <li><code>stop_execution</code><span class="desc" data-lang="en">Send SIGTERM to a running JMeter process</span><span class="desc" data-lang="pt">Envia SIGTERM para um processo JMeter em execução</span></li>
+            <li><code>get_execution_report</code><span class="desc" data-lang="en">Aggregated stats (per label + overall) parsed from the JTL output</span><span class="desc" data-lang="pt">Estatísticas agregadas (por label + geral) extraídas do JTL</span></li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- PROMPTS -->
+  <section id="prompts">
+    <div class="wrap">
+      <div class="eyebrow" data-lang="en">In practice</div>
+      <div class="eyebrow" data-lang="pt">Na prática</div>
+      <h2 data-lang="en">Example prompts</h2>
+      <h2 data-lang="pt">Exemplos de prompt</h2>
+      <p class="lead-p" data-lang="en">Five real shapes of request, from a one-liner to a multi-MCP workflow that captures a live browser session.</p>
+      <p class="lead-p" data-lang="pt">Cinco formatos reais de pedido, de uma linha até um fluxo com múltiplos MCPs que captura uma sessão real do navegador.</p>
+
+      <!-- 1 simple -->
+      <div class="prompt-card">
+        <div class="ptitle">
+          <span class="n">01</span>
+          <h4 data-lang="en">Simple request</h4>
+          <h4 data-lang="pt">Pedido simples</h4>
+        </div>
+        <div class="body">
+          <div class="say" data-lang="en">"Load test GET https://api.example.com/health with 10 users for 30 seconds, then run it and tell me the p95."</div>
+          <div class="say" data-lang="pt">"Faça um teste de carga em GET https://api.example.com/health com 10 usuários por 30 segundos e me diga o p95."</div>
+          <div class="flow" data-lang="en"><b>create_test_plan → add_thread_group → add_http_sampler → add_aggregate_report_listener → execute_test_plan → get_execution_status → get_execution_report</b></div>
+          <div class="flow" data-lang="pt"><b>create_test_plan → add_thread_group → add_http_sampler → add_aggregate_report_listener → execute_test_plan → get_execution_status → get_execution_report</b></div>
+          <p class="note" data-lang="en">The whole thing — build, run, poll, report — happens in one turn.</p>
+          <p class="note" data-lang="pt">Tudo isso — construir, rodar, checar, relatar — acontece em uma única resposta.</p>
+        </div>
+      </div>
+
+      <!-- 2 multi-step -->
+      <div class="prompt-card">
+        <div class="ptitle">
+          <span class="n">02</span>
+          <h4 data-lang="en">Multi-step test plan</h4>
+          <h4 data-lang="pt">Plano de teste com vários passos</h4>
+        </div>
+        <div class="body">
+          <div class="say" data-lang="en">"Build a checkout-flow test: 50 users ramping up over 1 minute, each doing GET /products, POST /cart, POST /checkout, wrapped in a Transaction Controller called 'Checkout Flow'. Add a Duration Assertion failing anything over 1s and a 500ms think-time timer between steps. Run for 5 minutes and summarize per transaction."</div>
+          <div class="say" data-lang="pt">"Monte um teste de fluxo de checkout: 50 usuários subindo ao longo de 1 minuto, cada um fazendo GET /products, POST /cart, POST /checkout, dentro de um Transaction Controller chamado 'Checkout Flow'. Adicione uma Duration Assertion que falha acima de 1s e um timer de 500ms de think-time entre os passos. Rode por 5 minutos e resuma por transação."</div>
+          <div class="flow"><b>create_test_plan → add_thread_group → add_transaction_controller → add_http_sampler ×3 → add_constant_timer → add_duration_assertion → add_aggregate_report_listener → execute_test_plan → get_execution_status → get_execution_report</b></div>
+          <p class="note" data-lang="en">Every element — controller, three samplers, timer, assertion, listener — is its own typed call, nested by <code>parentId</code>.</p>
+          <p class="note" data-lang="pt">Cada elemento — controller, três samplers, timer, assertion, listener — é uma chamada tipada própria, aninhada pelo <code>parentId</code>.</p>
+        </div>
+      </div>
+
+      <!-- 3 CSV -->
+      <div class="prompt-card">
+        <div class="ptitle">
+          <span class="n">03</span>
+          <h4 data-lang="en">Test plan with CSV data</h4>
+          <h4 data-lang="pt">Plano de teste com CSV</h4>
+        </div>
+        <div class="body">
+          <div class="say" data-lang="en">"I have /Users/me/data/users.csv with columns username,password. Parameterize a login test so 20 users each log in with a different row: POST /login with body { user: ${username}, pass: ${password} }. Add a Response Assertion checking the response contains 'welcome'."</div>
+          <div class="say" data-lang="pt">"Tenho /Users/me/data/users.csv com colunas username,password. Parametrize um teste de login onde 20 usuários fazem login cada um com uma linha diferente: POST /login com corpo { user: ${username}, pass: ${password} }. Adicione uma Response Assertion checando se a resposta contém 'welcome'."</div>
+          <div class="flow"><b>create_test_plan → add_thread_group → add_csv_data_set → add_http_sampler → add_response_assertion → add_aggregate_report_listener → execute_test_plan → get_execution_report</b></div>
+          <p class="note" data-lang="en">The CSV Data Set feeds a different row's <code>${username}</code>/<code>${password}</code> to each thread. Note: <code>filename</code> must be an <strong>absolute path</strong> — checked up front by <code>add_csv_data_set</code>.</p>
+          <p class="note" data-lang="pt">O CSV Data Set alimenta cada thread com uma linha diferente de <code>${username}</code>/<code>${password}</code>. Atenção: <code>filename</code> precisa ser um <strong>caminho absoluto</strong> — verificado logo na chamada de <code>add_csv_data_set</code>.</p>
+        </div>
+      </div>
+
+      <!-- 4 conditional -->
+      <div class="prompt-card">
+        <div class="ptitle">
+          <span class="n">04</span>
+          <h4 data-lang="en">Test plan with conditional elements</h4>
+          <h4 data-lang="pt">Plano de teste com elementos condicionais</h4>
+        </div>
+        <div class="body">
+          <div class="say" data-lang="en">"Hit GET /status, extract the 'state' field from the JSON response, and only call POST /retry if state is not 'ok', using an If Controller. Wrap the whole thing in a While Controller that keeps retrying until a 'done' variable is set."</div>
+          <div class="say" data-lang="pt">"Chame GET /status, extraia o campo 'state' da resposta JSON e só chame POST /retry se state não for 'ok', usando um If Controller. Envolva tudo em um While Controller que continua tentando até a variável 'done' ser definida."</div>
+          <div class="flow"><b>create_test_plan → add_thread_group → add_while_controller → add_http_sampler → add_json_extractor → add_if_controller → add_http_sampler → execute_test_plan → get_execution_report</b></div>
+          <p class="note" data-lang="en">This is exactly the element type behind the <a href="#why-mcp">real correctness bug</a> described above — a good reminder of why conditional logic goes through a tested serializer instead of freehand XML.</p>
+          <p class="note" data-lang="pt">Esse é exatamente o tipo de elemento por trás do <a href="#why-mcp">bug real de correção</a> descrito acima — um bom lembrete de por que a lógica condicional passa por um serializador testado, e não por XML escrito à mão.</p>
+        </div>
+      </div>
+
+      <!-- 5 browser/session -->
+      <div class="prompt-card">
+        <div class="ptitle">
+          <span class="n">05</span>
+          <h4 data-lang="en">Login &amp; web session, via Claude's browser plugin</h4>
+          <h4 data-lang="pt">Login &amp; sessão web, via plugin de navegador do Claude</h4>
+        </div>
+        <div class="body">
+          <div class="say" data-lang="en">"Open https://app.example.com in the browser and log me in. Grab the session cookie and bearer token from the network tab, then build a JMeter plan that replays that authenticated session: a Cookie Manager seeded with the session cookie, a Header Manager with the bearer token, hitting GET /dashboard and GET /account with 30 concurrent users for 2 minutes."</div>
+          <div class="say" data-lang="pt">"Abra https://app.example.com no navegador e faça meu login. Pegue o cookie de sessão e o bearer token na aba de rede, depois monte um plano JMeter que reproduz essa sessão autenticada: um Cookie Manager com o cookie de sessão, um Header Manager com o bearer token, batendo em GET /dashboard e GET /account com 30 usuários simultâneos por 2 minutos."</div>
+          <div class="flow" data-lang="en"><b>Claude in Chrome</b>: navigate → computer (login) → read_network_requests (capture cookie/token) &nbsp;+&nbsp; <b>jmeter-mcp-server</b>: create_test_plan → add_thread_group → add_cookie_manager → add_header_manager → add_http_sampler ×2 → execute_test_plan → get_execution_report</div>
+          <div class="flow" data-lang="pt"><b>Claude in Chrome</b>: navigate → computer (login) → read_network_requests (captura cookie/token) &nbsp;+&nbsp; <b>jmeter-mcp-server</b>: create_test_plan → add_thread_group → add_cookie_manager → add_header_manager → add_http_sampler ×2 → execute_test_plan → get_execution_report</div>
+          <p class="note" data-lang="en">Two MCP-driven tools in one session: the browser extension captures a real, human-authenticated session, and this server replays it under load — exactly the kind of composition MCP is designed for.</p>
+          <p class="note" data-lang="pt">Duas ferramentas orientadas por MCP em uma mesma sessão: a extensão do navegador captura uma sessão real, autenticada por um humano, e este servidor a reproduz sob carga — exatamente o tipo de composição para o qual o MCP foi pensado.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ROADMAP -->
+  <section id="roadmap">
+    <div class="wrap">
+      <div class="eyebrow" data-lang="en">What's next</div>
+      <div class="eyebrow" data-lang="pt">O que vem a seguir</div>
+      <h2 data-lang="en">Roadmap — the to-do list</h2>
+      <h2 data-lang="pt">Roadmap — a lista de to-do</h2>
+      <p class="lead-p" data-lang="en">
+        Ideas being explored for future releases — none of these are implemented yet. Each one already
+        has a written design doc in the repo's <code>.plans/</code> folder.
+      </p>
+      <p class="lead-p" data-lang="pt">
+        Ideias em avaliação para versões futuras — nenhuma delas está implementada ainda. Cada uma já tem
+        um documento de design escrito na pasta <code>.plans/</code> do repositório.
+      </p>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th data-lang="en">Proposed tool</th><th data-lang="pt">Ferramenta proposta</th>
+              <th data-lang="en">What it does</th><th data-lang="pt">O que faz</th>
+              <th data-lang="en">Why it's worth it</th><th data-lang="pt">Por que vale a pena</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="tool-name"><code>find_breaking_point</code></td>
+              <td data-lang="en">Automatic binary-search capacity finder: ramps thread count up/down on its own, run after run, until it finds the concurrency level that violates your SLA (p95 latency, error %).</td>
+              <td data-lang="pt">Localizador automático de capacidade por busca binária: ajusta a quantidade de threads para cima/baixo sozinho, execução após execução, até achar o nível de concorrência que viola o seu SLA (latência p95, % de erro).</td>
+              <td data-lang="en">JMeter has no native "find the limit" feature. Driving this search through raw LLM tool calls costs ~6-8 calls per round across the several rounds a binary search needs.</td>
+              <td data-lang="pt">O JMeter não tem um recurso nativo de "achar o limite". Conduzir essa busca via chamadas de ferramenta cruas custaria de 6 a 8 chamadas por rodada, em várias rodadas de busca binária.</td>
+            </tr>
+            <tr>
+              <td class="tool-name"><code>detect_bottleneck_class</code></td>
+              <td data-lang="en">Fits Little's Law / the Universal Scalability Law to collected concurrency vs. throughput vs. latency data, and classifies the bottleneck as contention, coherency, or saturation.</td>
+              <td data-lang="pt">Ajusta a Lei de Little / a Universal Scalability Law aos dados coletados de concorrência vs. throughput vs. latência, e classifica o gargalo como contenção, coerência ou saturação.</td>
+              <td data-lang="en">JMeter only outputs raw numbers; re-deriving a queueing-theory curve fit through prose reasoning would mean reimplementing nonlinear regression by hand.</td>
+              <td data-lang="pt">O JMeter só entrega números crus; re-derivar um ajuste de curva de teoria de filas via raciocínio em texto significaria reimplementar regressão não linear na mão.</td>
+            </tr>
+            <tr>
+              <td class="tool-name"><code>detect_soak_drift</code></td>
+              <td data-lang="en">Runs linear regression over the latency/error time series of a long-duration soak test to separate normal noise from a real trend (the classic memory-leak signal).</td>
+              <td data-lang="pt">Roda regressão linear sobre a série temporal de latência/erro de um soak test longo para separar ruído normal de uma tendência real (o clássico sinal de vazamento de memória).</td>
+              <td data-lang="en">JMeter's graph shows the curve, but doesn't say whether it's a statistically real degradation or just noise.</td>
+              <td data-lang="pt">O gráfico do JMeter mostra a curva, mas não diz se é uma degradação estatisticamente real ou só ruído.</td>
+            </tr>
+            <tr>
+              <td class="tool-name"><code>compare_execution_reports</code></td>
+              <td data-lang="en">Statistical diff across N executions (not just two), with a significance test for whether a p95 shift is real or noise.</td>
+              <td data-lang="pt">Diff estatístico entre N execuções (não só duas), com teste de significância para saber se uma mudança no p95 é real ou ruído.</td>
+              <td data-lang="en">A ready-made performance regression gate for CI, instead of someone eyeballing two JSON reports and guessing.</td>
+              <td data-lang="pt">Um gate de regressão de performance pronto para CI, em vez de alguém olhando dois relatórios JSON e chutando.</td>
+            </tr>
+            <tr>
+              <td class="tool-name"><code>isolate_warmup_window</code></td>
+              <td data-lang="en">Automatically detects where warm-up (JIT, connection pools, cold caches) ends, and recomputes metrics only over the steady-state window.</td>
+              <td data-lang="pt">Detecta automaticamente onde o warm-up (JIT, connection pools, caches frios) termina, e recalcula as métricas só sobre a janela de estado estável.</td>
+              <td data-lang="en">Today's overall average is polluted by the first few seconds of a run; JMeter doesn't separate this on its own.</td>
+              <td data-lang="pt">Hoje a média geral é poluída pelos primeiros segundos da execução; o JMeter não separa isso sozinho.</td>
+            </tr>
+            <tr>
+              <td class="tool-name"><code>classify_error_flakiness</code></td>
+              <td data-lang="en">Re-runs failed samples with backoff and separates "real system error" from "one-off flake" (network timeout, etc.).</td>
+              <td data-lang="pt">Reexecuta amostras que falharam com backoff e separa "erro real do sistema" de "falha isolada" (timeout de rede, etc.).</td>
+              <td data-lang="en">Produces a trustworthy error rate for a CI gate, instead of an errorPct that mixes both kinds together.</td>
+              <td data-lang="pt">Produz uma taxa de erro confiável para um gate de CI, em vez de um errorPct que mistura os dois tipos.</td>
+            </tr>
+            <tr>
+              <td class="tool-name"><code>orchestrate_distributed_run</code></td>
+              <td data-lang="en">Runs the same test plan across multiple JMeter injector nodes (master-slave) and merges every node's .jtl into a single aggregated report.</td>
+              <td data-lang="pt">Roda o mesmo plano de teste em vários nós injetores JMeter (master-slave) e mescla o .jtl de cada nó em um único relatório agregado.</td>
+              <td data-lang="en">JMeter supports distributed mode, but wiring up remote engines, RMI ports, matching versions, and merging results is entirely manual today.</td>
+              <td data-lang="pt">O JMeter suporta modo distribuído, mas configurar engines remotas, portas RMI, versões compatíveis e mesclar resultados hoje é totalmente manual.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- GAPS -->
+  <section id="gaps">
+    <div class="wrap">
+      <div class="eyebrow" data-lang="en">Honest scope</div>
+      <div class="eyebrow" data-lang="pt">Escopo, com franqueza</div>
+      <h2 data-lang="en">What's deliberately not covered yet</h2>
+      <h2 data-lang="pt">O que ainda falta cobrir, de propósito</h2>
+      <p class="lead-p" data-lang="en">
+        JMeter is a huge tool. This server targets the 52-tool core of real, everyday HTTP-first load
+        testing — samplers, controllers, config, timers, extractors, assertions, and reporting listeners
+        that get used constantly. Plenty of JMeter is intentionally left out for now.
+      </p>
+      <p class="lead-p" data-lang="pt">
+        O JMeter é uma ferramenta enorme. Este servidor cobre o núcleo de 52 ferramentas do teste de carga
+        real do dia a dia, focado em HTTP — samplers, controllers, config, timers, extractors, assertions
+        e listeners de relatório que são usados o tempo todo. Boa parte do JMeter fica de fora de
+        propósito, por enquanto.
+      </p>
+
+      <h3 data-lang="en">Explicitly out of v1 scope</h3>
+      <h3 data-lang="pt">Explicitamente fora do escopo do v1</h3>
+      <div class="gap-grid">
+        <div class="gap-item">
+          <span class="t" data-lang="en">HTML Dashboard Report</span>
+          <span class="t" data-lang="pt">Relatório HTML Dashboard</span>
+          <span class="d" data-lang="en">Generating JMeter's <code>-e -o</code> HTML report isn't wired up yet — only the aggregated JSON from <code>get_execution_report</code>.</span>
+          <span class="d" data-lang="pt">A geração do relatório HTML do JMeter (<code>-e -o</code>) ainda não foi implementada — só o JSON agregado de <code>get_execution_report</code>.</span>
+        </div>
+        <div class="gap-item">
+          <span class="t" data-lang="en">Parent-type validation</span>
+          <span class="t" data-lang="pt">Validação de tipo de pai</span>
+          <span class="d" data-lang="en">Nothing stops attaching an element under a semantically wrong parent via <code>add_*</code>/<code>move_element</code>/<code>import_test_plan</code>.</span>
+          <span class="d" data-lang="pt">Nada impede anexar um elemento sob um pai semanticamente errado via <code>add_*</code>/<code>move_element</code>/<code>import_test_plan</code>.</span>
+        </div>
+        <div class="gap-item">
+          <span class="t" data-lang="en">Distributed execution</span>
+          <span class="t" data-lang="pt">Execução distribuída</span>
+          <span class="d" data-lang="en">Multiple injector machines (roadmap: <code>orchestrate_distributed_run</code>).</span>
+          <span class="d" data-lang="pt">Múltiplas máquinas injetoras (no roadmap: <code>orchestrate_distributed_run</code>).</span>
+        </div>
+        <div class="gap-item">
+          <span class="t" data-lang="en">Full-body capture</span>
+          <span class="t" data-lang="pt">Captura de corpo completo</span>
+          <span class="d" data-lang="en">View Results Tree's <code>captureFullData</code> is a no-op today — runs always use CSV output, and JMeter's CSV writer never emits response body/header columns regardless of the flag.</span>
+          <span class="d" data-lang="pt"><code>captureFullData</code> do View Results Tree hoje não tem efeito — as execuções sempre usam saída CSV, e o writer CSV do JMeter nunca gera colunas de corpo/cabeçalho de resposta, independente da flag.</span>
+        </div>
+      </div>
+
+      <h3 data-lang="en">Structurally supported, not live-verified against real infra</h3>
+      <h3 data-lang="pt">Suportado estruturalmente, mas não verificado contra infra real</h3>
+      <p data-lang="en">
+        <code>add_jdbc_request</code>/<code>add_jdbc_connection_configuration</code>, <code>add_ftp_request</code>,
+        and <code>add_backend_listener</code> generate correct, JMeter-loadable XML, but exercising them
+        for real needs infrastructure this project doesn't provide (a database, an FTP server, an
+        InfluxDB/Graphite instance) — verified structurally, not against a live backend.
+      </p>
+      <p data-lang="pt">
+        <code>add_jdbc_request</code>/<code>add_jdbc_connection_configuration</code>, <code>add_ftp_request</code>
+        e <code>add_backend_listener</code> geram XML correto e carregável pelo JMeter, mas testá-los de
+        verdade exige infraestrutura que este projeto não fornece (um banco de dados, um servidor FTP,
+        uma instância InfluxDB/Graphite) — verificados estruturalmente, não contra um backend real.
+      </p>
+
+      <h3 data-lang="en">Broader JMeter surface not modeled at all, on purpose</h3>
+      <h3 data-lang="pt">Superfície mais ampla do JMeter, não modelada de propósito</h3>
+      <p data-lang="en">
+        JMeter ships far more element types than this server exposes. These weren't forgotten — they're
+        lower priority for a typed-tool workflow focused on HTTP-first load testing:
+      </p>
+      <p data-lang="pt">
+        O JMeter vem com muito mais tipos de elemento do que este servidor expõe. Eles não foram
+        esquecidos — são apenas prioridade menor para um fluxo de ferramentas tipadas focado em testes de
+        carga voltados a HTTP:
+      </p>
+      <div class="gap-grid">
+        <div class="gap-item">
+          <span class="t" data-lang="en">Other samplers</span><span class="t" data-lang="pt">Outros samplers</span>
+          <span class="d" data-lang="en">SOAP/XML-RPC Request, JMS Publisher/Subscriber, LDAP (Extended) Request, Mail Reader, OS Process Sampler, Access Log Sampler, Debug Sampler, JUnit Request.</span>
+          <span class="d" data-lang="pt">SOAP/XML-RPC Request, JMS Publisher/Subscriber, LDAP (Extended) Request, Mail Reader, OS Process Sampler, Access Log Sampler, Debug Sampler, JUnit Request.</span>
+        </div>
+        <div class="gap-item">
+          <span class="t" data-lang="en">Other controllers</span><span class="t" data-lang="pt">Outros controllers</span>
+          <span class="d" data-lang="en">Switch Controller, ForEach Controller, Include Controller, Module Controller, Runtime Controller, Critical Section Controller. Recording Controller is inherently GUI/proxy-based and out of scope by nature.</span>
+          <span class="d" data-lang="pt">Switch Controller, ForEach Controller, Include Controller, Module Controller, Runtime Controller, Critical Section Controller. O Recording Controller é inerentemente ligado à GUI/proxy e fica fora de escopo por natureza.</span>
+        </div>
+        <div class="gap-item">
+          <span class="t" data-lang="en">Other config elements</span><span class="t" data-lang="pt">Outros config elements</span>
+          <span class="d" data-lang="en">DNS Cache Manager, Cache Manager, Login Config Element, Keystore Configuration, Random Variable.</span>
+          <span class="d" data-lang="pt">DNS Cache Manager, Cache Manager, Login Config Element, Keystore Configuration, Random Variable.</span>
+        </div>
+        <div class="gap-item">
+          <span class="t" data-lang="en">Other timers</span><span class="t" data-lang="pt">Outros timers</span>
+          <span class="d" data-lang="en">Synchronizing Timer, Precise Throughput Timer, Poisson Random Timer, JSR223 Timer.</span>
+          <span class="d" data-lang="pt">Synchronizing Timer, Precise Throughput Timer, Poisson Random Timer, JSR223 Timer.</span>
+        </div>
+        <div class="gap-item">
+          <span class="t" data-lang="en">Other assertions</span><span class="t" data-lang="pt">Outras assertions</span>
+          <span class="d" data-lang="en">XML Assertion, XML Schema Assertion, HTML Assertion, Compare Assertion, SMIME Assertion, BeanShell Assertion.</span>
+          <span class="d" data-lang="pt">XML Assertion, XML Schema Assertion, HTML Assertion, Compare Assertion, SMIME Assertion, BeanShell Assertion.</span>
+        </div>
+        <div class="gap-item">
+          <span class="t" data-lang="en">GUI-only listeners</span><span class="t" data-lang="pt">Listeners só de GUI</span>
+          <span class="d" data-lang="en">Graph Results, Response Time Graph, View Results in Table, and similar — meant for live GUI viewing, not automated non-GUI runs. Aggregate/Summary/View Results Tree/Backend already cover automatable reporting.</span>
+          <span class="d" data-lang="pt">Graph Results, Response Time Graph, View Results in Table e similares — pensados para visualização ao vivo na GUI, não para execuções automatizadas non-GUI. Aggregate/Summary/View Results Tree/Backend já cobrem o relatório automatizável.</span>
+        </div>
+        <div class="gap-item">
+          <span class="t" data-lang="en">WorkBench / plugins</span><span class="t" data-lang="pt">WorkBench / plugins</span>
+          <span class="d" data-lang="en">WorkBench isn't even saved into a .jmx by JMeter itself. Third-party plugin elements (JMeter Plugins Manager ecosystem — custom thread groups, plugin timers/listeners) are outside core JMeter and out of scope.</span>
+          <span class="d" data-lang="pt">O WorkBench nem é salvo no .jmx pelo próprio JMeter. Elementos de plugins de terceiros (ecossistema do JMeter Plugins Manager — thread groups customizados, timers/listeners de plugin) ficam fora do core do JMeter e fora de escopo.</span>
+        </div>
+      </div>
+
+      <p data-lang="en">
+        Anything not modeled by a tool isn't lost, though: <code>import_test_plan</code> keeps unrecognized
+        elements as opaque <code>UnknownElement</code> nodes — original XML preserved and re-emitted as-is
+        — instead of dropping them. Coverage grows incrementally in <code>src/jmx/parser.ts</code>.
+      </p>
+      <p data-lang="pt">
+        Mesmo assim, nada do que não é modelado por uma ferramenta se perde: o <code>import_test_plan</code>
+        mantém elementos não reconhecidos como nós opacos <code>UnknownElement</code> — o XML original é
+        preservado e reemitido como está — em vez de descartá-los. A cobertura cresce aos poucos em
+        <code>src/jmx/parser.ts</code>.
+      </p>
+    </div>
+  </section>
+
+  <!-- ABOUT -->
+  <section id="about">
+    <div class="wrap">
+      <div class="eyebrow" data-lang="en">Author</div>
+      <div class="eyebrow" data-lang="pt">Autor</div>
+      <h2 data-lang="en">About</h2>
+      <h2 data-lang="pt">Sobre</h2>
+
+      <div class="about-wrap">
+        <div class="about-avatar">JL</div>
+        <div class="about-body">
+          <h3 style="margin-top:0" data-lang="en">Julio de Lima</h3>
+          <h3 style="margin-top:0" data-lang="pt">Julio de Lima</h3>
+
+          <p data-lang="en">
+            Principal QA Engineer at Capco and an AI Quality Engineering leader with 15+ years in
+            software quality, including 9+ years leading QE teams for financial institutions. He holds a
+            Bachelor's in Software Engineering and a Master's in Electrical and Computing Engineering
+            focused on AI and testing.
+          </p>
+          <p data-lang="pt">
+            Principal QA Engineer na Capco e líder em AI Quality Engineering, com mais de 15 anos em
+            qualidade de software, incluindo mais de 9 anos liderando equipes de QE para instituições
+            financeiras. É graduado em Engenharia de Software e mestre em Engenharia Elétrica e da
+            Computação, com foco em IA e testes.
+          </p>
+
+          <p data-lang="en">
+            An active voice in the Brazilian and international testing community: co-founder of
+            <strong>GaroaQA</strong> (a meetup with locations across Brazil and 2,000+ members), elected
+            the Brazilian Testing reference practitioner in 2020, and a speaker at conferences including
+            STAREast, Selenium Day North America, QA Global Summit, and BrowserStack's Breakpoint. He
+            also mentors on ADPList and teaches as a guest professor at CESAR School and Unicesumar.
+          </p>
+          <p data-lang="pt">
+            Uma voz ativa na comunidade de testes no Brasil e no exterior: cofundador da
+            <strong>GaroaQA</strong> (um meetup com encontros em várias cidades do Brasil e mais de 2.000
+            membros), eleito o profissional referência em Teste de Software no Brasil em 2020, e palestrante
+            em conferências como STAREast, Selenium Day North America, QA Global Summit e o Breakpoint da
+            BrowserStack. Também é mentor no ADPList e professor convidado na CESAR School e na
+            Unicesumar.
+          </p>
+
+          <p data-lang="en">
+            <code>jmeter-mcp-server</code> grew out of that same hands-on performance-testing background —
+            built, tested against real JMeter runs, and open-sourced under MIT.
+          </p>
+          <p data-lang="pt">
+            O <code>jmeter-mcp-server</code> nasceu dessa mesma vivência prática com testes de performance —
+            construído, testado contra execuções reais do JMeter, e disponibilizado como open source sob
+            licença MIT.
+          </p>
+
+          <div class="about-links">
+            <a href="https://github.com/juliodelimas" target="_blank" rel="noopener">GitHub ↗</a>
+            <a href="https://www.linkedin.com/in/juliodelimas/" target="_blank" rel="noopener">LinkedIn ↗</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p data-lang="en">
+      <code>jmeter-mcp-server</code> — MIT License · <a href="https://github.com/juliodelimas/jmeter-mcp-server" target="_blank" rel="noopener">Source on GitHub</a> · <a href="https://www.npmjs.com/package/jmeter-mcp-server" target="_blank" rel="noopener">Package on npm</a>
+    </p>
+    <p data-lang="pt">
+      <code>jmeter-mcp-server</code> — Licença MIT · <a href="https://github.com/juliodelimas/jmeter-mcp-server" target="_blank" rel="noopener">Código no GitHub</a> · <a href="https://www.npmjs.com/package/jmeter-mcp-server" target="_blank" rel="noopener">Pacote no npm</a>
+    </p>
+    <a class="backtop" href="#"><span data-lang="en">↑ back to top</span><span data-lang="pt">↑ voltar ao topo</span></a>
+  </div>
+</footer>
+
+<script>
+  function setLang(lang){
+    document.documentElement.classList.toggle('pt', lang === 'pt');
+    document.getElementById('lang-en').classList.toggle('active', lang === 'en');
+    document.getElementById('lang-pt').classList.toggle('active', lang === 'pt');
+    try{ localStorage.setItem('jmeter-mcp-lang', lang); }catch(e){}
+  }
+  (function(){
+    var saved = null;
+    try{ saved = localStorage.getItem('jmeter-mcp-lang'); }catch(e){}
+    setLang(saved === 'pt' ? 'pt' : 'en');
+  })();
+</script>
+
+</body>
+</html>
