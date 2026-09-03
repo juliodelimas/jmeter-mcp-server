@@ -548,6 +548,7 @@
     <div class="brand"><span class="dot">▸</span> jmeter-mcp-server</div>
     <div class="links">
       <a href="#mcp"><span data-lang="en">MCP</span><span data-lang="pt">MCP</span></a>
+      <a href="#install"><span data-lang="en">Install</span><span data-lang="pt">Instalação</span></a>
       <a href="#tools"><span data-lang="en">Tools</span><span data-lang="pt">Ferramentas</span></a>
       <a href="#prompts"><span data-lang="en">Prompts</span><span data-lang="pt">Exemplos</span></a>
       <a href="#roadmap"><span data-lang="en">Roadmap</span><span data-lang="pt">Roadmap</span></a>
@@ -845,6 +846,195 @@
         significa a menor superfície de ataque possível — um processo filho que só pode ser iniciado por
         algo que já está rodando na sua máquina, sem identidade de rede própria.
       </p>
+    </div>
+  </section>
+
+  <!-- PREREQUISITES -->
+  <section id="prerequisites">
+    <div class="wrap">
+      <div class="eyebrow" data-lang="en">Before you start</div>
+      <div class="eyebrow" data-lang="pt">Antes de começar</div>
+      <h2 data-lang="en">Prerequisites</h2>
+      <h2 data-lang="pt">Pré-requisitos</h2>
+      <p class="lead-p" data-lang="en">
+        Two things need to already be on your machine — the server itself is fetched on demand by
+        <code>npx</code>, no separate install step.
+      </p>
+      <p class="lead-p" data-lang="pt">
+        Só duas coisas precisam já estar na sua máquina — o servidor em si é baixado sob demanda pelo
+        <code>npx</code>, sem etapa de instalação separada.
+      </p>
+
+      <div class="two-col">
+        <div class="card">
+          <h3 style="margin-top:0" data-lang="en">Node.js 18+</h3>
+          <h3 style="margin-top:0" data-lang="pt">Node.js 18+</h3>
+          <p data-lang="en">Needed to run the server process itself (it ships as an npm package).</p>
+          <p data-lang="pt">Necessário para rodar o próprio processo do servidor (ele é distribuído como um pacote npm).</p>
+        </div>
+        <div class="card">
+          <h3 style="margin-top:0" data-lang="en">JMeter + <code>JMETER_HOME</code></h3>
+          <h3 style="margin-top:0" data-lang="pt">JMeter + <code>JMETER_HOME</code></h3>
+          <p data-lang="en">
+            JMeter installed locally, with the <code>JMETER_HOME</code> environment variable pointing at
+            the installation directory (the one containing <code>bin/jmeter</code>). On macOS via
+            Homebrew, <code>brew install jmeter</code> puts it at
+            <code>/opt/homebrew/opt/jmeter/libexec</code>.
+          </p>
+          <p data-lang="pt">
+            JMeter instalado localmente, com a variável de ambiente <code>JMETER_HOME</code> apontando
+            para o diretório de instalação (aquele que contém <code>bin/jmeter</code>). No macOS via
+            Homebrew, <code>brew install jmeter</code> instala em
+            <code>/opt/homebrew/opt/jmeter/libexec</code>.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- INSTALL -->
+  <section id="install">
+    <div class="wrap">
+      <div class="eyebrow" data-lang="en">Get started</div>
+      <div class="eyebrow" data-lang="pt">Comece agora</div>
+      <h2 data-lang="en">Installing the server</h2>
+      <h2 data-lang="pt">Instalando o servidor</h2>
+      <p class="lead-p" data-lang="en">
+        Published on npm as <code>jmeter-mcp-server</code> — no cloning or building required. Any MCP
+        client spawns it the same way: run <code>npx -y jmeter-mcp-server</code> as a stdio server, with
+        <code>JMETER_HOME</code> set in its environment.
+      </p>
+      <p class="lead-p" data-lang="pt">
+        Publicado no npm como <code>jmeter-mcp-server</code> — sem precisar clonar ou compilar nada.
+        Qualquer cliente MCP o inicia da mesma forma: rodando <code>npx -y jmeter-mcp-server</code> como
+        um servidor stdio, com <code>JMETER_HOME</code> definido no ambiente.
+      </p>
+
+      <h3 data-lang="en">Claude Code</h3>
+      <h3 data-lang="pt">Claude Code</h3>
+      <p data-lang="en">Via <code>npx</code> — the recommended route, nothing to clone or build:</p>
+      <p data-lang="pt">Via <code>npx</code> — o caminho recomendado, sem nada para clonar ou compilar:</p>
+      <pre><code>claude mcp add jmeter \
+  -e JMETER_HOME=/opt/homebrew/opt/jmeter/libexec \
+  -- npx -y jmeter-mcp-server</code></pre>
+      <p data-lang="en">
+        Adjust the <code>JMETER_HOME</code> path to your own install. The default scope is
+        <code>local</code> (this project only) — add <code>-s user</code> to make it available across
+        every project:
+      </p>
+      <p data-lang="pt">
+        Ajuste o caminho de <code>JMETER_HOME</code> para a sua instalação. O escopo padrão é
+        <code>local</code> (só este projeto) — adicione <code>-s user</code> para deixá-lo disponível em
+        todos os projetos:
+      </p>
+      <pre><code>claude mcp add jmeter -s user \
+  -e JMETER_HOME=/opt/homebrew/opt/jmeter/libexec \
+  -- npx -y jmeter-mcp-server</code></pre>
+      <p data-lang="en">Confirm it registered and is responding: <code>claude mcp list</code></p>
+      <p data-lang="pt">Confirme que ele foi registrado e está respondendo: <code>claude mcp list</code></p>
+
+      <div class="callout">
+        <p data-lang="en">
+          Working on this repo's own code instead? Point at the built <code>dist/index.js</code> directly:
+          <code>npm install &amp;&amp; npm run build</code>, then
+          <code>claude mcp add jmeter -e JMETER_HOME=... -- node /absolute/path/to/dist/index.js</code>.
+        </p>
+        <p data-lang="pt">
+          Está trabalhando no código deste próprio repositório? Aponte direto para o
+          <code>dist/index.js</code> já compilado: <code>npm install &amp;&amp; npm run build</code>, e
+          depois <code>claude mcp add jmeter -e JMETER_HOME=... -- node /caminho/absoluto/para/dist/index.js</code>.
+        </p>
+      </div>
+
+      <h3 data-lang="en">Claude Desktop</h3>
+      <h3 data-lang="pt">Claude Desktop</h3>
+      <p data-lang="en">Add this to <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>:</p>
+      <p data-lang="pt">Adicione isto em <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>:</p>
+      <pre><code>{
+  "mcpServers": {
+    "jmeter": {
+      "command": "npx",
+      "args": ["-y", "jmeter-mcp-server"],
+      "env": {
+        "JMETER_HOME": "/opt/homebrew/opt/jmeter/libexec"
+      }
+    }
+  }
+}</code></pre>
+      <div class="callout bad">
+        <p data-lang="en">
+          Unlike a terminal-launched app, Claude Desktop does <strong>not</strong> inherit environment
+          variables exported in your shell profile (<code>.zshrc</code>, etc.) — only true system-wide
+          ones. Always set <code>JMETER_HOME</code> explicitly in the <code>env</code> block above rather
+          than relying on it already being "set on your machine".
+        </p>
+        <p data-lang="pt">
+          Diferente de um app iniciado pelo terminal, o Claude Desktop <strong>não</strong> herda
+          variáveis de ambiente exportadas no seu perfil de shell (<code>.zshrc</code>, etc.) — só as
+          realmente globais do sistema. Sempre defina <code>JMETER_HOME</code> explicitamente no bloco
+          <code>env</code> acima, em vez de contar que ela já está "definida na sua máquina".
+        </p>
+      </div>
+
+      <h3 data-lang="en">Other MCP clients</h3>
+      <h3 data-lang="pt">Outros clientes MCP</h3>
+      <p data-lang="en">
+        This is a standard stdio MCP server, so anything that speaks MCP over stdio can run it — Cursor,
+        Windsurf, Cline, Zed, and others typically use the same shape of config Claude Desktop does: a
+        command, its args, and an env block, usually under an <code>mcpServers</code> (or similarly
+        named) key in that client's own config file:
+      </p>
+      <p data-lang="pt">
+        Este é um servidor MCP stdio padrão, então qualquer coisa que fale MCP via stdio consegue rodá-lo —
+        Cursor, Windsurf, Cline, Zed e outros normalmente usam o mesmo formato de config do Claude
+        Desktop: um comando, seus args, e um bloco de env, geralmente sob uma chave <code>mcpServers</code>
+        (ou nome parecido) no arquivo de configuração próprio daquele cliente:
+      </p>
+      <pre><code>{
+  "command": "npx",
+  "args": ["-y", "jmeter-mcp-server"],
+  "env": {
+    "JMETER_HOME": "/opt/homebrew/opt/jmeter/libexec"
+  }
+}</code></pre>
+      <p data-lang="en">
+        Check that client's own docs for the exact config file location and key name — the
+        <code>command</code>/<code>args</code>/<code>env</code> shape above is the part that stays the
+        same everywhere.
+      </p>
+      <p data-lang="pt">
+        Consulte a documentação daquele cliente para o local exato do arquivo de config e o nome da chave
+        — o formato <code>command</code>/<code>args</code>/<code>env</code> acima é a parte que se
+        mantém igual em todo lugar.
+      </p>
+
+      <h3 data-lang="en">Environment variables</h3>
+      <h3 data-lang="pt">Variáveis de ambiente</h3>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th data-lang="en">Variable</th><th data-lang="pt">Variável</th>
+              <th data-lang="en">Required</th><th data-lang="pt">Obrigatória</th>
+              <th data-lang="en">Purpose</th><th data-lang="pt">Finalidade</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="tool-name"><code>JMETER_HOME</code></td>
+              <td data-lang="en">Yes</td><td data-lang="pt">Sim</td>
+              <td data-lang="en">JMeter installation directory (must contain <code>bin/jmeter</code>)</td>
+              <td data-lang="pt">Diretório de instalação do JMeter (deve conter <code>bin/jmeter</code>)</td>
+            </tr>
+            <tr>
+              <td class="tool-name"><code>JMETER_MCP_WORKSPACE</code></td>
+              <td data-lang="en">No</td><td data-lang="pt">Não</td>
+              <td data-lang="en">Where plans and executions are stored. Defaults to <code>./jmeter-workspace</code> relative to wherever the server process starts</td>
+              <td data-lang="pt">Onde planos e execuções são armazenados. Padrão: <code>./jmeter-workspace</code>, relativo ao diretório onde o processo do servidor inicia</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </section>
 
