@@ -473,6 +473,12 @@
   td.tool-name code{ white-space:nowrap; }
   .tablewrap{ overflow-x:auto; }
 
+  .mark-yes{ color:var(--green); font-family:var(--mono); font-weight:600; }
+  .mark-no{ color:var(--red); font-family:var(--mono); font-weight:600; }
+  .mark-na{ color:var(--text-faint); font-family:var(--mono); }
+  tr.this-row td{ color:var(--text); }
+  tr.this-row td.tool-name code{ color:var(--accent); }
+
   /* gaps */
   .gap-grid{
     display:grid;
@@ -560,6 +566,7 @@
       <a href="#prompts"><span data-lang="en">Prompts</span><span data-lang="pt">Exemplos</span></a>
       <a href="#roadmap"><span data-lang="en">Roadmap</span><span data-lang="pt">Roadmap</span></a>
       <a href="#gaps"><span data-lang="en">Gaps</span><span data-lang="pt">Lacunas</span></a>
+      <a href="#landscape"><span data-lang="en">Landscape</span><span data-lang="pt">Panorama</span></a>
       <a href="#about"><span data-lang="en">About</span><span data-lang="pt">Sobre</span></a>
       <a href="https://github.com/juliodelimas/jmeter-mcp-server" target="_blank" rel="noopener">GitHub</a>
     </div>
@@ -1516,6 +1523,152 @@
         mantém elementos não reconhecidos como nós opacos <code>UnknownElement</code> — o XML original é
         preservado e reemitido como está — em vez de descartá-los. A cobertura cresce aos poucos em
         <code>src/jmx/parser.ts</code>.
+      </p>
+    </div>
+  </section>
+
+  <!-- LANDSCAPE -->
+  <section id="landscape">
+    <div class="wrap">
+      <div class="eyebrow" data-lang="en">Where this fits</div>
+      <div class="eyebrow" data-lang="pt">Onde isso se encaixa</div>
+      <h2 data-lang="en">How this compares</h2>
+      <h2 data-lang="pt">Como isso se compara</h2>
+
+      <p class="lead-p" data-lang="en">
+        Checked against the other public JMeter MCP servers found on GitHub as of
+        <strong>September 3, 2026</strong> — open-source repositories with at least a README
+        description (undocumented forks/clones excluded). Columns reflect what each project's own
+        README documents, not independent verification of its internals.
+      </p>
+      <p class="lead-p" data-lang="pt">
+        Comparado com os outros servidores MCP para JMeter públicos encontrados no GitHub em
+        <strong>3 de setembro de 2026</strong> — repositórios open source com pelo menos uma
+        descrição no README (forks/clones sem documentação foram excluídos). As colunas refletem o
+        que o README de cada projeto documenta, não uma verificação independente do código interno.
+      </p>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th data-lang="en">Server</th><th data-lang="pt">Servidor</th>
+              <th data-lang="en">Approach</th><th data-lang="pt">Abordagem</th>
+              <th><code>.jmx</code> round-trip</th>
+              <th data-lang="en">Edit by id</th><th data-lang="pt">Edição por id</th>
+              <th data-lang="en">Async run</th><th data-lang="pt">Execução assíncrona</th>
+              <th data-lang="en">Tests</th><th data-lang="pt">Testes</th>
+              <th data-lang="en">Real JMeter</th><th data-lang="pt">JMeter real</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="this-row">
+              <td class="tool-name"><code>jmeter-mcp-server</code><br><span style="color:var(--text-faint);font-size:0.78rem;" data-lang="en">this project</span><span style="color:var(--text-faint);font-size:0.78rem;" data-lang="pt">este projeto</span></td>
+              <td data-lang="en">JSON tree, 34 element types, authored and edited by node id</td>
+              <td data-lang="pt">Árvore JSON, 34 tipos de elemento, criados e editados por id de nó</td>
+              <td class="mark-yes">✓</td>
+              <td class="mark-yes">✓</td>
+              <td class="mark-yes">✓</td>
+              <td class="mark-yes" data-lang="en">166, incl. real runs</td><td class="mark-yes" data-lang="pt">166, incl. execuções reais</td>
+              <td class="mark-yes">✓</td>
+            </tr>
+            <tr>
+              <td class="tool-name"><code>QAInsights/jmeter-mcp-server</code></td>
+              <td data-lang="en">Runs an existing <code>.jmx</code> and analyzes the results — doesn't author plans</td>
+              <td data-lang="pt">Roda um <code>.jmx</code> já existente e analisa os resultados — não cria planos</td>
+              <td class="mark-na">—</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-yes">✓</td>
+            </tr>
+            <tr>
+              <td class="tool-name"><code>aravindksk7/Jmeter-MCP</code></td>
+              <td data-lang="en">Generates a <code>.jmx</code> from parameters; no re-import of existing plans</td>
+              <td data-lang="pt">Gera um <code>.jmx</code> a partir de parâmetros; não reimporta planos existentes</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-yes">✓</td>
+            </tr>
+            <tr>
+              <td class="tool-name"><code>chandanvars/jmeter-mcp-server</code></td>
+              <td data-lang="en">Generates a whole plan from one JSON payload, runs it via Docker</td>
+              <td data-lang="pt">Gera o plano inteiro a partir de um payload JSON único, executa via Docker</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-yes">✓</td>
+            </tr>
+            <tr>
+              <td class="tool-name"><code>perfsage/perfsage-jmeter-mcp</code></td>
+              <td data-lang="en">Heals the local JMeter runtime, imports HAR/OpenAPI traffic, discovers capacity</td>
+              <td data-lang="pt">Cura o runtime local do JMeter, importa tráfego HAR/OpenAPI, descobre capacidade</td>
+              <td class="mark-na">—</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-yes">✓</td>
+            </tr>
+            <tr>
+              <td class="tool-name"><code>shruthi-r18/ClaudeCode_MCP_QA_Automation_Performance</code></td>
+              <td data-lang="en">Demo project for a tutorial video, 11 fixed tools</td>
+              <td data-lang="pt">Projeto de demonstração de um vídeo tutorial, 11 ferramentas fixas</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-yes">✓</td>
+            </tr>
+            <tr>
+              <td class="tool-name"><code>KenLin-7/jmeter-mcp-server</code></td>
+              <td data-lang="en">Reimplements HTTP load testing in Node — no Apache JMeter underneath</td>
+              <td data-lang="pt">Reimplementa o load testing HTTP em Node — sem Apache JMeter por baixo</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+            </tr>
+            <tr>
+              <td class="tool-name"><code>MUYU0615/jmeter_mcp_server</code></td>
+              <td data-lang="en">Generates a <code>.jmx</code> with basic parameters (threads, ramp-up, duration)</td>
+              <td data-lang="pt">Gera um <code>.jmx</code> com parâmetros básicos (threads, ramp-up, duração)</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-yes">✓</td>
+            </tr>
+            <tr>
+              <td class="tool-name"><code>vjgit-369/JmeterDemoUsingMCP</code></td>
+              <td data-lang="en">Demo script with parameters hardcoded in source, not a general-purpose server</td>
+              <td data-lang="pt">Script de demonstração com parâmetros fixos no código, não um servidor de propósito geral</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-no">✗</td>
+              <td class="mark-yes">✓</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p data-lang="en">
+        Every capability in that table shows up somewhere across the other eight projects,
+        individually: real JMeter execution, <code>.jmx</code> generation, traffic import. This is
+        the only one that combines full <code>.jmx</code> round-trip (import <em>and</em> export),
+        per-id incremental editing, non-blocking async execution, and a documented automated test
+        suite in one place.
+      </p>
+      <p data-lang="pt">
+        Cada capacidade dessa tabela aparece em algum lugar entre os outros oito projetos,
+        individualmente: execução real do JMeter, geração de <code>.jmx</code>, importação de
+        tráfego. Este é o único que reúne round-trip completo de <code>.jmx</code> (import
+        <em>e</em> export), edição incremental por id, execução assíncrona não bloqueante e uma
+        suíte de testes automatizados documentada, tudo junto.
       </p>
     </div>
   </section>

@@ -380,6 +380,30 @@ Ideas being explored for future releases — none of these are implemented yet:
 | `classify_error_flakiness` | Re-runs failed samples with backoff and separates "real system error" from "one-off flake" (network timeout, etc.) | Produces a trustworthy error rate for a CI gate, instead of an `errorPct` that mixes both kinds together |
 | `orchestrate_distributed_run` | Runs the same test plan across multiple JMeter injector nodes (master-slave, via `-R` or independent engines) and merges every node's `.jtl` into a single aggregated report | JMeter supports distributed mode, but wiring up remote engines, RMI ports, matching JMeter versions, and merging results across machines is entirely manual today — nobody sets this up for a quick test |
 
+## How this compares
+
+Checked against the other public JMeter MCP servers found on GitHub as of September 3, 2026 —
+open-source repositories with at least a README description (undocumented forks/clones excluded).
+Columns reflect what each project's own README documents, not independent verification of its
+internals.
+
+| Server | Approach | `.jmx` round-trip | Edit by id | Async run | Tests | Real JMeter |
+| --- | --- | --- | --- | --- | --- | --- |
+| **jmeter-mcp-server** (this project) | JSON tree, 34 element types, authored and edited by node id | ✓ | ✓ | ✓ | 166, incl. real runs | ✓ |
+| [QAInsights/jmeter-mcp-server](https://github.com/QAInsights/jmeter-mcp-server) | Runs an existing `.jmx` and analyzes results — doesn't author plans | — | ✗ | ✗ | ✗ | ✓ |
+| [aravindksk7/Jmeter-MCP](https://github.com/aravindksk7/Jmeter-MCP) | Generates a `.jmx` from parameters; no re-import of existing plans | ✗ | ✗ | ✗ | ✗ | ✓ |
+| [chandanvars/jmeter-mcp-server](https://github.com/chandanvars/jmeter-mcp-server) | Generates a whole plan from one JSON payload, runs it via Docker | ✗ | ✗ | ✗ | ✗ | ✓ |
+| [perfsage/perfsage-jmeter-mcp](https://github.com/perfsage/perfsage-jmeter-mcp) | Heals the local JMeter runtime, imports HAR/OpenAPI traffic, discovers capacity | — | ✗ | ✗ | ✗ | ✓ |
+| [shruthi-r18/ClaudeCode_MCP_QA_Automation_Performance](https://github.com/shruthi-r18/ClaudeCode_MCP_QA_Automation_Performance) | Demo project for a tutorial video, 11 fixed tools | ✗ | ✗ | ✗ | ✗ | ✓ |
+| [KenLin-7/jmeter-mcp-server](https://github.com/KenLin-7/jmeter-mcp-server) | Reimplements HTTP load testing in Node — no Apache JMeter underneath | ✗ | ✗ | ✗ | ✗ | ✗ |
+| [MUYU0615/jmeter_mcp_server](https://github.com/MUYU0615/jmeter_mcp_server) | Generates a `.jmx` with basic parameters (threads, ramp-up, duration) | ✗ | ✗ | ✗ | ✗ | ✓ |
+| [vjgit-369/JmeterDemoUsingMCP](https://github.com/vjgit-369/JmeterDemoUsingMCP) | Demo script with parameters hardcoded in source, not a general-purpose server | ✗ | ✗ | ✗ | ✗ | ✓ |
+
+Every capability in that table shows up somewhere across the other eight projects, individually:
+real JMeter execution, `.jmx` generation, traffic import. This is the only one that combines full
+`.jmx` round-trip (import *and* export), per-id incremental editing, non-blocking async execution,
+and a documented automated test suite in one place.
+
 ## License
 
 MIT
