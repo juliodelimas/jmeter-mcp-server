@@ -496,17 +496,24 @@
     flex-wrap:wrap;
   }
   .about-avatar{
-    width:96px; height:96px;
+    width:112px; height:112px;
     border-radius:50%;
     background:linear-gradient(135deg, var(--accent), var(--teal));
     flex:0 0 auto;
-    display:flex;
-    align-items:center;
-    justify-content:center;
+    padding:3px;
+  }
+  .about-avatar img{
+    display:block;
+    width:100%; height:100%;
+    border-radius:50%;
+    object-fit:cover;
+    border:2px solid var(--bg);
+  }
+  .about-title{
     font-family:var(--mono);
-    font-size:1.8rem;
-    font-weight:700;
-    color:#141414;
+    font-size:0.86rem;
+    color:var(--accent);
+    margin:-4px 0 14px;
   }
   .about-body{ flex:1 1 320px; min-width:260px; }
   .about-links{ display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
@@ -1522,38 +1529,50 @@
       <h2 data-lang="pt">Sobre</h2>
 
       <div class="about-wrap">
-        <div class="about-avatar">JL</div>
+        <div class="about-avatar"><img src="assets/julio-de-lima.jpg" alt="Julio de Lima" width="112" height="112" loading="lazy"></div>
         <div class="about-body">
           <h3 style="margin-top:0" data-lang="en">Julio de Lima</h3>
           <h3 style="margin-top:0" data-lang="pt">Julio de Lima</h3>
+          <div class="about-title" data-lang="en">Senior Manager, AI Quality Engineering — Capco</div>
+          <div class="about-title" data-lang="pt">Senior Manager, AI Quality Engineering — Capco</div>
 
           <p data-lang="en">
-            Principal QA Engineer at Capco and an AI Quality Engineering leader with 15+ years in
-            software quality, including 9+ years leading QE teams for financial institutions. He holds a
-            Bachelor's in Software Engineering and a Master's in Electrical and Computing Engineering
-            focused on AI and testing.
+            AI Quality Engineering leader with 15+ years in software quality, 9+ years leading QE
+            organizations, and 4+ years shaping AI-driven quality solutions. Leads the Capco US Quality
+            Engineering practice and 15+ QA and automation professionals, combining organization building
+            with hands-on framework architecture for API, web, mobile, desktop, performance, and
+            cloud-connected systems. Has implemented automation programs in 18 companies. Holds an MSc
+            focused on Artificial Intelligence, with published research applying anomaly detection to
+            automated software testing.
           </p>
           <p data-lang="pt">
-            Principal QA Engineer na Capco e líder em AI Quality Engineering, com mais de 15 anos em
-            qualidade de software, incluindo mais de 9 anos liderando equipes de QE para instituições
-            financeiras. É graduado em Engenharia de Software e mestre em Engenharia Elétrica e da
-            Computação, com foco em IA e testes.
+            Líder em AI Quality Engineering com mais de 15 anos em qualidade de software, mais de 9 anos
+            liderando organizações de QE e mais de 4 anos moldando soluções de qualidade orientadas por
+            IA. Lidera a prática de Quality Engineering da Capco nos EUA e mais de 15 profissionais de QA
+            e automação, combinando construção organizacional com arquitetura prática de frameworks para
+            sistemas de API, web, mobile, desktop, performance e conectados à nuvem. Já implementou
+            programas de automação em 18 empresas. É mestre com foco em Inteligência Artificial, com
+            pesquisa publicada aplicando detecção de anomalias a testes de software automatizados.
           </p>
 
+          <h3 data-lang="en">AI quality thought leadership</h3>
+          <h3 data-lang="pt">Liderança de pensamento em qualidade e IA</h3>
           <p data-lang="en">
-            An active voice in the Brazilian and international testing community: co-founder of
-            <strong>GaroaQA</strong> (a meetup with locations across Brazil and 2,000+ members), elected
-            the Brazilian Testing reference practitioner in 2020, and a speaker at conferences including
-            STAREast, Selenium Day North America, QA Global Summit, and BrowserStack's Breakpoint. He
-            also mentors on ADPList and teaches as a guest professor at CESAR School and Unicesumar.
+            International speaker and instructor on AI-driven API testing, GenAI in test automation, and
+            quality leadership at <strong>EuroSTAR</strong>, <strong>STAREast</strong>,
+            <strong>STARWest</strong>, <strong>AutomationSTAR</strong>, and other global conferences —
+            has taught AI-driven API testing to 500+ professionals in person. Has educated 22,000+ testing
+            professionals; creator of Brazil's largest software testing YouTube channel, with 100,000+
+            subscribers; postgraduate instructor and industry mentor.
           </p>
           <p data-lang="pt">
-            Uma voz ativa na comunidade de testes no Brasil e no exterior: cofundador da
-            <strong>GaroaQA</strong> (um meetup com encontros em várias cidades do Brasil e mais de 2.000
-            membros), eleito o profissional referência em Teste de Software no Brasil em 2020, e palestrante
-            em conferências como STAREast, Selenium Day North America, QA Global Summit e o Breakpoint da
-            BrowserStack. Também é mentor no ADPList e professor convidado na CESAR School e na
-            Unicesumar.
+            Palestrante e instrutor internacional sobre testes de API orientados por IA, uso de GenAI em
+            automação de testes e liderança em qualidade em conferências como <strong>EuroSTAR</strong>,
+            <strong>STAREast</strong>, <strong>STARWest</strong>, <strong>AutomationSTAR</strong> e outros
+            eventos globais — já ensinou testes de API orientados por IA presencialmente a mais de 500
+            profissionais. Já capacitou mais de 22.000 profissionais de teste; criador do maior canal do
+            Brasil sobre testes de software no YouTube, com mais de 100.000 inscritos; professor de
+            pós-graduação e mentor na indústria.
           </p>
 
           <p data-lang="en">
